@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conciliador Automático</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --primary: #FFE600;
+    --primary-dark: #e6cf00;
+    --bg: #0f1117;
+    --white: #1a1d27;
+    --surface: #232636;
+    --text: #f0f2ff;
+    --text-inv: #1a1a2e;
+    --gray: #8b93b0;
+    --gray-light: #2e3248;
+    --match: #34d399;
+    --only-a: #60a5fa;
+    --only-b: #a78bfa;
+    --diff: #fbbf24;
+    --danger: #f87171;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* HEADER */
+  .header { background: #090c14; color: var(--primary); padding: 18px 32px; display: flex; align-items: center; gap: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.5); border-bottom: 1px solid var(--gray-light); }
+  .header-logo { font-size: 28px; font-weight: 900; letter-spacing: -1px; }
+  .header h1 { font-size: 20px; font-weight: 700; color: var(--text); }
+  .header span { color: var(--primary); }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+  /* STEPS */
+  .steps { display: flex; gap: 8px; margin-bottom: 32px; align-items: center; }
+  .step { display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 99px; background: var(--white); border: 2px solid var(--gray-light); font-size: 13px; font-weight: 600; color: var(--gray); transition: all 0.3s; }
+  .step.active { background: var(--primary); border-color: var(--primary); color: #111; }
+  .step.done { background: var(--gray-light); border-color: var(--gray-light); color: var(--text); }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--gray-light); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+  .step.active .step-num { background: rgba(0,0,0,0.15); }
+  .step.done .step-num { background: rgba(255,255,255,0.2); }
+  .step-sep { color: var(--gray-light); font-size: 20px; }
+
+  /* CARD */
+  .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; margin-bottom: 24px; border: 1px solid var(--gray-light); }
+  .card-title { font-size: 16px; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .card-title .icon { font-size: 20px; }
+
+  /* FILE GRID */
+  .files-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+
+  /* FILE ZONE */
+  .file-zone { border: 2px dashed var(--gray-light); border-radius: var(--radius); padding: 28px 20px; text-align: center; cursor: pointer; transition: all 0.25s; position: relative; background: var(--surface); }
+  .file-zone:hover, .file-zone.drag-over { border-color: var(--primary); background: #2a2a14; }
+  .file-zone.loaded { border-color: var(--match); border-style: solid; background: #0d2a1e; }
+  .file-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .file-icon { font-size: 36px; margin-bottom: 10px; }
+  .file-label { font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 4px; }
+  .file-sublabel { font-size: 12px; color: var(--gray); }
+  .file-name { font-size: 13px; font-weight: 600; color: var(--match); margin-top: 8px; word-break: break-all; }
+  .file-info { font-size: 12px; color: var(--gray); margin-top: 2px; }
+  .remove-file { position: absolute; top: 8px; right: 10px; font-size: 18px; cursor: pointer; color: var(--danger); z-index: 2; background: none; border: none; }
+
+  /* TOGGLE TABS (local / drive) */
+  .source-toggle { display: flex; gap: 0; margin-bottom: 12px; border-radius: 10px; overflow: hidden; border: 1.5px solid var(--gray-light); }
+  .source-btn { flex: 1; padding: 8px 0; font-size: 12px; font-weight: 700; cursor: pointer; border: none; background: var(--surface); color: var(--gray); transition: all 0.2s; }
+  .source-btn.active { background: var(--primary); color: #111; }
+
+  /* DRIVE INPUT */
+  .drive-input-wrap { display: none; flex-direction: column; gap: 8px; }
+  .drive-input-wrap.visible { display: flex; }
+  .drive-input-row { display: flex; gap: 8px; }
+  .drive-url-input { flex: 1; padding: 10px 14px; border: 1.5px solid var(--gray-light); border-radius: 8px; font-size: 13px; outline: none; transition: border-color 0.2s; background: var(--surface); color: var(--text); }
+  .drive-url-input:focus { border-color: var(--primary-dark); }
+  .btn-load-drive { padding: 10px 16px; background: var(--primary); color: #111; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
+  .btn-load-drive:hover { opacity: 0.85; }
+  .drive-hint { font-size: 11px; color: var(--gray); display: flex; align-items: flex-start; gap: 5px; line-height: 1.4; }
+  .drive-loading { font-size: 12px; color: var(--only-a); display: none; align-items: center; gap: 6px; }
+  .drive-loading.visible { display: flex; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--gray-light); border-top-color: var(--only-a); border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+  /* SHEET SELECTOR */
+  .sheet-row { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+  .sheet-row label { font-size: 13px; color: var(--gray); min-width: 90px; }
+  select { flex: 1; padding: 8px 12px; border: 1.5px solid var(--gray-light); border-radius: 8px; font-size: 13px; background: var(--surface); color: var(--text); cursor: pointer; outline: none; transition: border-color 0.2s; }
+  select:focus { border-color: var(--primary-dark); }
+
+  /* BANK SELECTOR */
+  .bank-selector-wrap { margin-top: 18px; padding: 16px 18px; background: #1e1c00; border: 1.5px solid var(--primary); border-radius: 10px; display: none; }
+  .bank-selector-wrap.visible { display: block; }
+  .bank-selector-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .bank-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .bank-chip { padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 700; cursor: pointer; border: 2px solid var(--gray-light); background: var(--surface); color: var(--text); transition: all 0.18s; }
+  .bank-chip:hover { border-color: var(--primary-dark); background: #2a2a14; }
+  .bank-chip.selected { background: var(--primary); border-color: var(--primary); color: #111; }
+  .bank-chip.all-chip { background: var(--gray-light); border-color: var(--gray-light); color: var(--text); }
+  .bank-chip.all-chip.selected { background: var(--primary); border-color: var(--primary); color: #111; }
+
+  /* KEY MANAGEMENT */
+  .keys-section { margin-top: 4px; }
+  .keys-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .add-key-btn { padding: 6px 14px; background: var(--primary); color: #111; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  .add-key-btn:hover { opacity: 0.85; }
+  .key-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center; margin-bottom: 10px; padding: 10px 14px; background: var(--surface); border-radius: 8px; border: 1.5px solid var(--gray-light); }
+  .key-row .key-index { font-size: 11px; color: var(--gray); font-weight: 700; text-transform: uppercase; }
+  .remove-key { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 18px; padding: 0 4px; }
+
+  /* BUTTONS */
+  .btn { padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; border: none; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: #111; }
+  .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--gray-light); color: var(--text); border: 1.5px solid #3e4460; }
+  .btn-secondary:hover { background: #3e4460; }
+  .btn-export { padding: 8px 18px; font-size: 13px; font-weight: 600; border-radius: 8px; background: var(--match); color: #0d1f0f; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: opacity 0.2s; }
+  .btn-export:hover { opacity: 0.85; }
+
+  /* SUMMARY */
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .summary-card { border-radius: var(--radius); padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+  .summary-card:hover { transform: translateY(-2px); }
+  .summary-card.active { border-color: currentColor; }
+  .summary-card.c-match { background: #0d2a1e; color: var(--match); }
+  .summary-card.c-only-a { background: #0d1f3c; color: var(--only-a); }
+  .summary-card.c-only-b { background: #1a1030; color: var(--only-b); }
+  .summary-card.c-diff { background: #2a1e00; color: var(--diff); }
+  .summary-num { font-size: 36px; font-weight: 900; }
+  .summary-label { font-size: 12px; font-weight: 600; opacity: 0.8; margin-top: 2px; }
+
+  /* ACTIVE BANK BADGE */
+  .active-bank-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: var(--primary); color: var(--text); border-radius: 99px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; background: var(--gray-light); border-radius: 10px; padding: 4px; width: fit-content; }
+  .tab { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--gray); transition: all 0.2s; }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 6px rgba(0,0,0,0.4); }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--gray-light); max-height: 460px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: #111827; color: #f9fafb; position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--gray-light); }
+  th { padding: 12px 14px; text-align: left; font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none; }
+  th:hover { background: #1f2937; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--gray-light); white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface); }
+  .cell-diff { background: #3d2400; font-weight: 700; color: var(--diff); }
+  .tooltip { position: relative; cursor: help; }
+  .tooltip:hover::after { content: attr(data-tip); position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: #1a1a2e; color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 6px; white-space: nowrap; z-index: 99; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; background: var(--gray-light); color: var(--gray); margin-left: 6px; }
+
+  /* SEARCH / TOOLBAR */
+  .table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+  .search-box { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1.5px solid var(--gray-light); border-radius: 8px; padding: 8px 14px; flex: 1; max-width: 320px; }
+  .search-box input { border: none; background: none; outline: none; font-size: 13px; flex: 1; color: var(--text); }
+
+  /* LOADING */
+  .loading-bar { height: 4px; background: var(--gray-light); border-radius: 99px; overflow: hidden; margin-bottom: 12px; display: none; }
+  .loading-bar.active { display: block; }
+  .loading-bar-inner { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; border-radius: 99px; }
+  .status-msg { font-size: 13px; color: var(--gray); text-align: center; margin-bottom: 8px; min-height: 20px; }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 48px 24px; color: var(--gray); }
+
+  /* SCROLLBAR dark */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--gray-light); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gray); }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-title { font-weight: 700; margin-bottom: 6px; }
+
+  .section { display: none; }
+  .section.visible { display: block; }
+
+  @media (max-width: 700px) {
+    .files-grid, .summary-grid { grid-template-columns: 1fr; }
+    .key-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">PSJ</div>
+  <div>
+    <h1>Conciliador Automático <span>✦</span></h1>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- STEPS -->
+  <div class="steps">
+    <div class="step active" id="step1"><div class="step-num">1</div> Cargar archivos</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step2"><div class="step-num">2</div> Configurar llaves</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step3"><div class="step-num">3</div> Ver resultados</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SECTION 1: CARGAR ARCHIVOS
+  ═══════════════════════════════════════════════ -->
+  <div class="section visible" id="sec-upload">
+    <div class="card">
+      <div class="card-title"><span class="icon">📂</span> Carga tus dos archivos</div>
+
+      <div class="files-grid">
+
+        <!-- ─── ARCHIVO A (local only) ─── -->
+        <div>
+          <div style="font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text)">
+            Archivo A <span style="font-weight:400; color:var(--gray)">— tu extracto / reporte interno</span>
+          </div>
+          <div class="file-zone" id="zone-a"
+               ondragover="dragOver(event,'a')" ondragleave="dragLeave('a')" ondrop="dropFile(event,'a')">
+            <input type="file" id="input-a" accept=".xlsx,.xls,.csv" onchange="loadFile('a', this.files[0])">
+            <div id="zone-a-content">
+              <div class="file-icon">📄</div>
+              <div class="file-label">Archivo A</div>
+              <div class="file-sublabel">Arrastra aquí o haz clic<br>.xlsx · .xls · .csv</div>
+            </div>
+          </div>
+          <div class="sheet-row" id="sheet-row-a" style="display:none">
+            <label>Hoja:</label>
+            <select id="sheet-a" onchange="selectSheet('a')"></select>
+          </div>
+        </div>
+
+        <!-- ─── ARCHIVO B (local + Drive) ─── -->
+        <div>
+          <div style="font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text)">
+            Archivo B <span style="font-weight:400; color:var(--gray)">— extracto bancario / referencia</span>
+          </div>
+
+          <!-- Toggle fuente -->
+          <div class="source-toggle">
+            <button class="source-btn active" id="src-btn-local" onclick="setSource('local')">
+              💾 Desde mi equipo
+            </button>
+            <button class="source-btn" id="src-btn-drive" onclick="setSource('drive')">
+              🟢 Google Drive / Sheets
+            </button>
+          </div>
+
+          <!-- LOCAL -->
+          <div id="src-local">
+            <div class="file-zone" id="zone-b"
+                 ondragover="dragOver(event,'b')" ondragleave="dragLeave('b')" ondrop="dropFile(event,'b')">
+              <input type="file" id="input-b" accept=".xlsx,.xls,.csv" onchange="loadFile('b', this.files[0])">
+              <div id="zone-b-content">
+                <div class="file-icon">📄</div>
+                <div class="file-label">Archivo B</div>
+                <div class="file-sublabel">Arrastra aquí o haz clic<br>.xlsx · .xls · .csv</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- DRIVE -->
+          <div id="src-drive" style="display:none">
+            <div class="drive-input-wrap visible" id="drive-input-wrap">
+              <div class="drive-input-row">
+                <input class="drive-url-input" id="drive-url" type="text"
+                       placeholder="Pega el link de Google Sheets o Drive…"
+                       onkeydown="if(event.key==='Enter') loadFromDrive()">
+                <button class="btn-load-drive" onclick="loadFromDrive()">Cargar</button>
+              </div>
+              <div class="drive-hint">
+                ℹ️ El archivo debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>.
+                Funciona con Google Sheets y archivos .xlsx/.csv subidos a Drive.
+              </div>
+              <div class="drive-loading" id="drive-loading">
+                <div class="spinner"></div> Descargando desde Drive…
+              </div>
+            </div>
+            <!-- Zone B (Drive loaded) -->
+            <div class="file-zone" id="zone-b-drive" style="display:none; margin-top:8px">
+              <div id="zone-b-drive-content"></div>
+            </div>
+          </div>
+
+          <div class="sheet-row" id="sheet-row-b" style="display:none">
+            <label>Hoja:</label>
+            <select id="sheet-b" onchange="selectSheet('b')"></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── SELECTOR DE BANCO ─── -->
+      <div class="bank-selector-wrap" id="bank-selector-wrap">
+        <div class="bank-selector-title">🏦 ¿Qué banco vas a conciliar?</div>
+        <div class="bank-chips" id="bank-chips"></div>
+        <div style="font-size:11px; color:var(--gray); margin-top:8px">
+          Selecciona un banco para filtrar el Archivo B antes de cruzar. "Todos" usa el archivo completo.
+        </div>
+      </div>
+
+      <div style="text-align:right; margin-top:20px">
+        <button class="btn btn-primary" id="btn-next-1" onclick="goToKeys()" disabled>
+          Continuar → Configurar llaves
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SECTION 2: LLAVES
+  ═══════════════════════════════════════════════ -->
+  <div class="section" id="sec-keys">
+    <div class="card">
+      <div class="card-title"><span class="icon">🔑</span> Configura las llaves de cruce</div>
+      <p style="font-size:13px; color:var(--gray); margin-bottom:18px">
+        Selecciona las columnas que identifican un mismo registro en ambos archivos. Puedes usar una o varias llaves combinadas.
+      </p>
+      <div class="keys-section">
+        <div class="keys-header">
+          <span style="font-size:14px; font-weight:700">Llaves de cruce</span>
+          <button class="add-key-btn" onclick="addKeyRow()">+ Agregar llave</button>
+        </div>
+        <div id="keys-container"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:20px">
+        <button class="btn btn-secondary" onclick="goBack(1)">← Volver</button>
+        <button class="btn btn-primary" id="btn-conciliar" onclick="conciliar()">⚡ Conciliar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SECTION 3: RESULTADOS
+  ═══════════════════════════════════════════════ -->
+  <div class="section" id="sec-results">
+    <div class="loading-bar" id="loading-bar">
+      <div class="loading-bar-inner" id="loading-bar-inner"></div>
+    </div>
+    <div class="status-msg" id="status-msg"></div>
+
+    <div id="results-body" style="display:none">
+      <div id="active-bank-badge"></div>
+
+      <div class="summary-grid">
+        <div class="summary-card c-match" id="sc-match" onclick="switchTab('match')">
+          <div class="summary-num" id="cnt-match">0</div>
+          <div class="summary-label">✓ Coinciden exacto</div>
+        </div>
+        <div class="summary-card c-diff" id="sc-diff" onclick="switchTab('diff')">
+          <div class="summary-num" id="cnt-diff">0</div>
+          <div class="summary-label">⚠ Con diferencias</div>
+        </div>
+        <div class="summary-card c-only-a" id="sc-only-a" onclick="switchTab('no-match')">
+          <div class="summary-num" id="cnt-a">0</div>
+          <div class="summary-label">✗ Sin match en B</div>
+        </div>
+        <div class="summary-card c-only-b" id="sc-only-b" onclick="switchTab('only-b')">
+          <div class="summary-num" id="cnt-b">0</div>
+          <div class="summary-label">Solo en B</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:20px">
+        <div class="table-toolbar">
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search-input" placeholder="Buscar en resultados…" oninput="filterTable()">
+          </div>
+          <button class="btn-export" onclick="exportExcel()">⬇ Exportar Excel</button>
+        </div>
+        <div class="tabs" id="tabs"></div>
+        <div class="table-wrap">
+          <table id="result-table">
+            <thead id="result-head"></thead>
+            <tbody id="result-body"></tbody>
+          </table>
+          <div class="empty" id="empty-state" style="display:none">
+            <div class="empty-icon">🎉</div>
+            <div class="empty-title">Sin registros en esta categoría</div>
+          </div>
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--gray)" id="row-count"></div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; margin-top:4px">
+        <button class="btn btn-secondary" onclick="goBack(1)">← Nueva conciliación</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+const state = {
+  a:  { wb: null, sheetName: null, data: null, name: '' },
+  b:  { wb: null, sheetName: null, data: null, name: '', fullData: null },
+  results: { match: [], diff: [], onlyA: [], onlyB: [] },
+  currentTab: 'match',
+  currentRows: [],
+  columns: { a: [], b: [] },
+  keyPairs: [],
+  selectedBank: '__ALL__',
+  bSource: 'local',          // 'local' | 'drive'
+};
+
+// ═══════════════════════════════════════════
+// SOURCE TOGGLE (local / Drive)
+// ═══════════════════════════════════════════
+function setSource(src) {
+  state.bSource = src;
+  document.getElementById('src-btn-local').classList.toggle('active', src === 'local');
+  document.getElementById('src-btn-drive').classList.toggle('active', src === 'drive');
+  document.getElementById('src-local').style.display = src === 'local' ? 'block' : 'none';
+  document.getElementById('src-drive').style.display = src === 'drive' ? 'block' : 'none';
+  // Reset B if switching source
+  resetB();
+}
+
+function resetB() {
+  state.b = { wb: null, sheetName: null, data: null, name: '', fullData: null };
+  state.columns.b = [];
+  state.selectedBank = '__ALL__';
+  hideBankSelector();
+  document.getElementById('sheet-row-b').style.display = 'none';
+  // Reset local zone
+  const zc = document.getElementById('zone-b-content');
+  if (zc) zc.innerHTML = `<div class="file-icon">📄</div><div class="file-label">Archivo B</div><div class="file-sublabel">Arrastra aquí o haz clic<br>.xlsx · .xls · .csv</div>`;
+  const zb = document.getElementById('zone-b');
+  if (zb) zb.classList.remove('loaded');
+  const rm = document.getElementById('zone-b')?.querySelector('.remove-file');
+  if (rm) rm.remove();
+  document.getElementById('input-b').value = '';
+  // Reset drive zone
+  const zbd = document.getElementById('zone-b-drive');
+  if (zbd) zbd.style.display = 'none';
+  document.getElementById('drive-url').value = '';
+  document.getElementById('drive-loading').classList.remove('visible');
+  checkReady();
+}
+
+// ═══════════════════════════════════════════
+// LOAD FROM DRIVE
+// ═══════════════════════════════════════════
+async function loadFromDrive() {
+  const url = document.getElementById('drive-url').value.trim();
+  if (!url) { alert('Pega un link de Google Sheets o Drive.'); return; }
+
+  const exportUrl = driveToExportUrl(url);
+  if (!exportUrl) {
+    alert('No pude reconocer el link. Asegúrate de que sea un link de Google Sheets o un archivo de Drive compartido.');
+    return;
+  }
+
+  document.getElementById('drive-loading').classList.add('visible');
+  try {
+    const res = await fetch(exportUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status} — verifica que el archivo esté compartido públicamente.`);
+    const buf = await res.arrayBuffer();
+    const data = new Uint8Array(buf);
+    const wb = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+
+    state.b.wb = wb;
+    const sheets = wb.SheetNames;
+    if (sheets.length > 1) {
+      const sel = document.getElementById('sheet-b');
+      sel.innerHTML = sheets.map(s => `<option>${s}</option>`).join('');
+      document.getElementById('sheet-row-b').style.display = 'flex';
+    } else {
+      document.getElementById('sheet-row-b').style.display = 'none';
+    }
+    state.b.sheetName = sheets[0];
+    loadSheet('b');
+
+    const fileName = extractDriveFileName(url);
+    state.b.name = fileName;
+
+    // Show loaded zone
+    const zone = document.getElementById('zone-b-drive');
+    zone.style.display = 'block';
+    zone.classList.add('loaded');
+    document.getElementById('zone-b-drive-content').innerHTML = `
+      <div class="file-icon">🟢</div>
+      <div class="file-name">${esc(fileName)}</div>
+      <div class="file-info">${state.b.data.length.toLocaleString()} filas · ${state.columns.b.length} columnas · desde Drive</div>
+      <button class="remove-file" onclick="resetB()" style="z-index:3">✕</button>
+    `;
+
+    checkBankColumn();
+    checkReady();
+  } catch(err) {
+    alert('Error cargando desde Drive: ' + err.message);
+  } finally {
+    document.getElementById('drive-loading').classList.remove('visible');
+  }
+}
+
+function driveToExportUrl(url) {
+  // Google Sheets: https://docs.google.com/spreadsheets/d/ID/...
+  let m = url.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) {
+    // Get gid if present
+    const gid = url.match(/[#&?]gid=(\d+)/)?.[1] || '0';
+    return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=xlsx&gid=${gid}`;
+  }
+  // Google Drive file: https://drive.google.com/file/d/ID/view or /open?id=ID
+  m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  return null;
+}
+
+function extractDriveFileName(url) {
+  if (url.includes('spreadsheets')) return 'Google Sheets';
+  if (url.includes('drive.google.com')) return 'Archivo de Drive';
+  return 'Archivo B (Drive)';
+}
+
+// ═══════════════════════════════════════════
+// LOCAL FILE LOADING
+// ═══════════════════════════════════════════
+function loadFile(side, file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+      state[side].wb = wb;
+      state[side].name = file.name;
+      const sheets = wb.SheetNames;
+      if (sheets.length > 1) {
+        const sel = document.getElementById(`sheet-${side}`);
+        sel.innerHTML = sheets.map(s => `<option>${s}</option>`).join('');
+        document.getElementById(`sheet-row-${side}`).style.display = 'flex';
+      } else {
+        document.getElementById(`sheet-row-${side}`).style.display = 'none';
+      }
+      state[side].sheetName = sheets[0];
+      loadSheet(side);
+      renderFileZone(side, file.name);
+      if (side === 'b') checkBankColumn();
+      checkReady();
+    } catch(err) { alert('Error leyendo el archivo: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function selectSheet(side) {
+  state[side].sheetName = document.getElementById(`sheet-${side}`).value;
+  loadSheet(side);
+  if (side === 'b') { checkBankColumn(); }
+}
+
+function loadSheet(side) {
+  const { wb, sheetName } = state[side];
+  const ws = wb.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+  state[side].data = raw;
+  if (side === 'b') state[side].fullData = raw;  // keep full copy for bank filtering
+  state.columns[side] = raw.length > 0 ? Object.keys(raw[0]) : [];
+}
+
+function renderFileZone(side, name) {
+  const zone = document.getElementById(`zone-${side}`);
+  const content = document.getElementById(`zone-${side}-content`);
+  zone.classList.add('loaded');
+  content.innerHTML = `
+    <div class="file-icon">✅</div>
+    <div class="file-name">${esc(name)}</div>
+    <div class="file-info">${state[side].data.length.toLocaleString()} filas · ${state.columns[side].length} columnas</div>
+  `;
+  let rm = zone.querySelector('.remove-file');
+  if (!rm) {
+    rm = document.createElement('button');
+    rm.className = 'remove-file';
+    rm.innerHTML = '✕';
+    rm.onclick = ev => { ev.stopPropagation(); side === 'b' ? resetB() : removeFileA(); };
+    zone.appendChild(rm);
+  }
+}
+
+function removeFileA() {
+  state.a = { wb: null, sheetName: null, data: null, name: '' };
+  state.columns.a = [];
+  document.getElementById('zone-a').classList.remove('loaded');
+  document.getElementById('zone-a-content').innerHTML = `<div class="file-icon">📄</div><div class="file-label">Archivo A</div><div class="file-sublabel">Arrastra aquí o haz clic<br>.xlsx · .xls · .csv</div>`;
+  const rm = document.getElementById('zone-a').querySelector('.remove-file');
+  if (rm) rm.remove();
+  document.getElementById('input-a').value = '';
+  document.getElementById('sheet-row-a').style.display = 'none';
+  checkReady();
+}
+
+function dragOver(e, side) { e.preventDefault(); document.getElementById(`zone-${side}`).classList.add('drag-over'); }
+function dragLeave(side) { document.getElementById(`zone-${side}`).classList.remove('drag-over'); }
+function dropFile(e, side) {
+  e.preventDefault(); dragLeave(side);
+  if (e.dataTransfer.files[0]) loadFile(side, e.dataTransfer.files[0]);
+}
+
+function checkReady() {
+  document.getElementById('btn-next-1').disabled = !(state.a.data && state.b.data);
+}
+
+// ═══════════════════════════════════════════
+// BANK COLUMN DETECTION
+// ═══════════════════════════════════════════
+function checkBankColumn() {
+  const bancoCol = findBankColumn();
+  if (!bancoCol) { hideBankSelector(); return; }
+
+  // Extract unique banks
+  const banks = [...new Set(
+    (state.b.fullData || state.b.data).map(r => String(r[bancoCol] ?? '').trim()).filter(Boolean)
+  )].sort();
+
+  if (banks.length === 0) { hideBankSelector(); return; }
+
+  state._bancoCol = bancoCol;
+  state.selectedBank = '__ALL__';
+
+  const wrap = document.getElementById('bank-selector-wrap');
+  wrap.classList.add('visible');
+
+  const chips = document.getElementById('bank-chips');
+  chips.innerHTML = `
+    <div class="bank-chip all-chip selected" id="chip-ALL" onclick="selectBank('__ALL__')">Todos (${(state.b.fullData||state.b.data).length.toLocaleString()})</div>
+    ${banks.map(b => `<div class="bank-chip" id="chip-${esc(b)}" onclick="selectBank('${esc(b)}')">${esc(b)}</div>`).join('')}
+  `;
+}
+
+function findBankColumn() {
+  const cols = state.columns.b;
+  return cols.find(c => c.trim().toLowerCase() === 'banco')
+    || cols.find(c => c.trim().toLowerCase().includes('banco'))
+    || cols.find(c => c.trim().toLowerCase().includes('bank'))
+    || null;
+}
+
+function hideBankSelector() {
+  document.getElementById('bank-selector-wrap').classList.remove('visible');
+  state._bancoCol = null;
+}
+
+function selectBank(bank) {
+  state.selectedBank = bank;
+  // Update chips UI
+  document.querySelectorAll('.bank-chip').forEach(c => c.classList.remove('selected'));
+  const chipId = bank === '__ALL__' ? 'chip-ALL' : `chip-${bank}`;
+  const chip = document.getElementById(chipId);
+  if (chip) chip.classList.add('selected');
+
+  // Filter B data
+  const fullData = state.b.fullData || state.b.data;
+  if (bank === '__ALL__') {
+    state.b.data = fullData;
+  } else {
+    const bancoCol = state._bancoCol;
+    state.b.data = fullData.filter(r => String(r[bancoCol] ?? '').trim() === bank);
+  }
+  // Update columns in case they changed
+  state.columns.b = state.b.data.length > 0 ? Object.keys(state.b.data[0]) : Object.keys(fullData[0] || {});
+}
+
+// ═══════════════════════════════════════════
+// KEYS
+// ═══════════════════════════════════════════
+let keyCount = 0;
+
+function goToKeys() {
+  showSection('keys');
+  setStep(2);
+  const c = document.getElementById('keys-container');
+  c.innerHTML = '';
+  keyCount = 0;
+  addKeyRow();
+}
+
+function addKeyRow() {
+  keyCount++;
+  const id = keyCount;
+  const colsA = state.columns.a.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const colsB = state.columns.b.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const div = document.createElement('div');
+  div.className = 'key-row';
+  div.id = `key-row-${id}`;
+  div.innerHTML = `
+    <div>
+      <div class="key-index">Llave ${id}</div>
+      <select id="key-a-${id}">${colsA}</select>
+      <div style="font-size:11px;color:var(--gray);margin-top:3px">Columna en Archivo A</div>
+    </div>
+    <div>
+      <select id="key-b-${id}" onchange="checkKeyTransform(this, ${id})">${colsB}</select>
+      <div style="font-size:11px;color:var(--gray);margin-top:3px">Columna en Archivo B</div>
+      <div id="key-transform-${id}" style="display:none; margin-top:4px; font-size:11px; font-weight:700; color:#d97706; background:#fef3c7; padding:3px 8px; border-radius:6px; width:fit-content">
+        ⚙ DERECHA(CONCAT("000000";valor);6)
+      </div>
+    </div>
+    <button class="remove-key" onclick="removeKeyRow(${id})">✕</button>
+  `;
+  document.getElementById('keys-container').appendChild(div);
+  // Auto-match same column name
+  const aCol = state.columns.a[0] || '';
+  const match = state.columns.b.find(c => c.toLowerCase() === aCol.toLowerCase()) || state.columns.b[0] || '';
+  document.getElementById(`key-a-${id}`).value = aCol;
+  document.getElementById(`key-b-${id}`).value = match;
+  checkKeyTransform(document.getElementById(`key-b-${id}`), id);
+}
+
+function removeKeyRow(id) {
+  const el = document.getElementById(`key-row-${id}`);
+  if (el) el.remove();
+  if (document.getElementById('keys-container').children.length === 0) addKeyRow();
+}
+
+function getKeyPairs() {
+  const pairs = [];
+  document.querySelectorAll('[id^="key-row-"]').forEach(row => {
+    const num = row.id.split('-').pop();
+    const ka = document.getElementById(`key-a-${num}`)?.value;
+    const kb = document.getElementById(`key-b-${num}`)?.value;
+    if (ka && kb) pairs.push({ a: ka, b: kb });
+  });
+  return pairs;
+}
+
+// ═══════════════════════════════════════════
+// CONCILIATION
+// ═══════════════════════════════════════════
+function conciliar() {
+  const keyPairs = getKeyPairs();
+  if (!keyPairs.length) { alert('Agrega al menos una llave de cruce.'); return; }
+  state.keyPairs = keyPairs;
+  showSection('results');
+  setStep(3);
+  document.getElementById('results-body').style.display = 'none';
+  setStatus('Procesando…', 0);
+  setTimeout(() => {
+    try { runConciliation(keyPairs); }
+    catch(err) { alert('Error en la conciliación: ' + err.message); }
+  }, 50);
+}
+
+function runConciliation(keyPairs) {
+  const dataA = state.a.data;
+  const dataB = state.b.data;
+  const colsA = state.columns.a;
+  const colsB = state.columns.b;
+  const keyColsA = new Set(keyPairs.map(p => p.a));
+
+  setStatus('Indexando archivo B…', 20);
+  const indexB = new Map();
+  dataB.forEach((row, i) => {
+    const key = makeKey(row, keyPairs.map(p => p.b), 'b');
+    if (!indexB.has(key)) indexB.set(key, []);
+    indexB.get(key).push({ row, i });
+  });
+
+  setStatus('Cruzando registros…', 50);
+  const matchedB = new Set();
+
+  // Resultado = File A en orden original, con lookup de B
+  const allRows = dataA.map(rowA => {
+    const key = makeKey(rowA, keyPairs.map(p => p.a), 'a');
+    const bMatches = indexB.get(key);
+    if (!bMatches || bMatches.length === 0) {
+      return { rowA, rowB: null, status: 'no-match', differences: [] };
+    }
+    const { row: rowB, i: iB } = bMatches[0];
+    matchedB.add(iB);
+    const differences = [];
+    colsA.forEach(col => {
+      if (!keyColsA.has(col) && colsB.includes(col)) {
+        const va = normForCol(col, rowA[col]);
+        const vb = normForCol(col, rowB[col]);
+        if (va !== vb) differences.push({ col, valA: rowA[col], valB: rowB[col] });
+      }
+    });
+    return { rowA, rowB, status: differences.length > 0 ? 'diff' : 'match', differences };
+  });
+
+  setStatus('Calculando estadísticas…', 80);
+  const onlyB = dataB.filter((_, i) => !matchedB.has(i));
+  const cntMatch   = allRows.filter(r => r.status === 'match').length;
+  const cntDiff    = allRows.filter(r => r.status === 'diff').length;
+  const cntNoMatch = allRows.filter(r => r.status === 'no-match').length;
+
+  state.results = { allRows, onlyB, cntMatch, cntDiff, cntNoMatch };
+  setStatus('Listo ✓', 100);
+
+  setTimeout(() => {
+    document.getElementById('loading-bar').classList.remove('active');
+    document.getElementById('status-msg').textContent = '';
+    document.getElementById('results-body').style.display = 'block';
+
+    const badge = document.getElementById('active-bank-badge');
+    badge.innerHTML = state.selectedBank !== '__ALL__'
+      ? `<div class="active-bank-badge">🏦 Banco: ${esc(state.selectedBank)} · ${dataB.length.toLocaleString()} registros B</div>`
+      : '';
+
+    document.getElementById('cnt-match').textContent   = cntMatch.toLocaleString();
+    document.getElementById('cnt-diff').textContent    = cntDiff.toLocaleString();
+    document.getElementById('cnt-a').textContent       = cntNoMatch.toLocaleString();
+    document.getElementById('cnt-b').textContent       = onlyB.length.toLocaleString();
+    buildTabs();
+    switchTab('all');
+  }, 300);
+}
+
+// Columnas que reciben la transformación DERECHA(CONCAT("000000";valor);6)
+const CODIGO_AUTH_PATTERN = /cod.*aut|aut.*cod/i;
+
+function checkKeyTransform(sel, id) {
+  const col = sel?.value || '';
+  const badge = document.getElementById(`key-transform-${id}`);
+  if (badge) badge.style.display = isCodAuth(col) ? 'block' : 'none';
+}
+
+function isCodAuth(colName) {
+  return CODIGO_AUTH_PATTERN.test(String(colName).normalize('NFD').replace(/[̀-ͯ]/g,''));
+}
+
+// DERECHA(CONCAT("000000"; valor); 6)  →  últimos 6 dígitos, relleno de ceros a la izquierda
+function padAuth(val) {
+  const s = String(val ?? '').trim().replace(/\s/g, '');
+  return ('000000' + s).slice(-6);
+}
+
+function transformValue(col, val, side) {
+  if (isCodAuth(col)) return padAuth(val);   // aplica en A y en B
+  return String(val ?? '').trim();
+}
+
+function makeKey(row, cols, side) {
+  return cols.map(c => transformValue(c, row[c], side).toLowerCase()).join('||');
+}
+// Columnas que se comparan como entero (ignora decimales, espacios, .00, etc.)
+const INT_COL_PATTERN = /bin|monto.*aut|aut.*monto|ultimos.*dig|dig.*ultimos|cuotas/i;
+
+function isIntCol(colName) {
+  return INT_COL_PATTERN.test(String(colName).normalize('NFD').replace(/[̀-ͯ]/g,''));
+}
+
+// Normalización para comparar diferencias
+function normForCol(col, v) {
+  const s = String(v ?? '').trim();
+  if (isIntCol(col)) {
+    const n = parseInt(s.replace(/[^\d-]/g,''), 10);
+    return isNaN(n) ? s.toLowerCase() : String(n);
+  }
+  return s.toLowerCase();
+}
+
+function norm(v) { return String(v ?? '').trim().toLowerCase(); }
+
+// ═══════════════════════════════════════════
+// TABLE
+// ═══════════════════════════════════════════
+function buildTabs() {
+  const { allRows, onlyB, cntMatch, cntDiff, cntNoMatch } = state.results;
+  const total = allRows.length;
+  const tabs = [
+    { id: 'all',      label: 'Todos (A)',       count: total },
+    { id: 'match',    label: '✓ Exacto',        count: cntMatch },
+    { id: 'diff',     label: '⚠ Diferencias',  count: cntDiff },
+    { id: 'no-match', label: '✗ Sin match',     count: cntNoMatch },
+    { id: 'only-b',   label: 'Solo en B',       count: onlyB.length },
+  ];
+  document.getElementById('tabs').innerHTML = tabs.map(t =>
+    `<button class="tab" id="tab-${t.id}" onclick="switchTab('${t.id}')">${t.label} <span class="pill">${t.count.toLocaleString()}</span></button>`
+  ).join('');
+}
+
+function switchTab(tab) {
+  state.currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.summary-card').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  // highlight summary card
+  const scMap = { match: 'sc-match', diff: 'sc-diff', 'no-match': 'sc-only-a', 'only-b': 'sc-only-b' };
+  if (scMap[tab]) document.getElementById(scMap[tab])?.classList.add('active');
+  document.getElementById('search-input').value = '';
+  renderTable(tab, '');
+}
+
+// ── Columnas lookup que se traen de B para filas con match ──────────────────
+// Busca en colsB y retorna [{colB, label}]
+function getLookupCols() {
+  const colsB = state.columns.b;
+  const defs = [
+    { pattern: /^status$/i,    label: 'Observaciones MP' },
+    { pattern: /^segmento$/i,  label: 'segmento' },
+  ];
+  return defs
+    .map(d => ({ colB: colsB.find(c => d.pattern.test(c.trim())), label: d.label }))
+    .filter(x => x.colB);           // solo las que existen en B
+}
+
+// Celdas extra (lookup) para una fila con match
+function lookupCells(rowB, lookups) {
+  return lookups.map(l =>
+    `<td style="background:#0d1a2e; color:#60a5fa; font-style:italic">${esc(String(rowB?.[l.colB] ?? ''))}</td>`
+  ).join('');
+}
+
+function renderTable(tab, search) {
+  const { allRows, onlyB } = state.results;
+  const colsA = state.columns.a;
+  const colsB = state.columns.b;
+  const lookups = getLookupCols();
+
+  // Filtrar por pestaña
+  let rows, isOnlyB = false;
+  if (tab === 'only-b') {
+    isOnlyB = true;
+    rows = onlyB.map(rowB => ({ rowA: null, rowB, status: 'only-b', differences: [] }));
+  } else {
+    rows = tab === 'all' ? allRows
+         : tab === 'match'    ? allRows.filter(r => r.status === 'match')
+         : tab === 'diff'     ? allRows.filter(r => r.status === 'diff')
+         : /* no-match */       allRows.filter(r => r.status === 'no-match');
+  }
+
+  const sq = search.toLowerCase();
+  const filtered = sq
+    ? rows.filter(r => {
+        const src = r.rowA || r.rowB;
+        return Object.values(src).some(v => String(v).toLowerCase().includes(sq));
+      })
+    : rows;
+  state.currentRows = filtered;
+
+  // Cabeceras
+  const columns = isOnlyB ? colsB : colsA;
+  const lookupHeaders = isOnlyB ? '' : lookups.map(l =>
+    `<th style="background:#0a1929; color:#60a5fa; border-left:2px solid #1e3a5f">${esc(l.label)}</th>`
+  ).join('');
+  document.getElementById('result-head').innerHTML =
+    `<tr>${columns.map(c => `<th onclick="sortTable('${esc(c)}')">${esc(c)}</th>`).join('')}${lookupHeaders}</tr>`;
+
+  // Renderer de filas
+  const renderRow = isOnlyB
+    ? r => colsB.map(c => `<td>${esc(r.rowB[c] ?? '')}</td>`).join('')
+    : r => {
+        const dc = new Set(r.differences.map(d => d.col));
+        return colsA.map(c => {
+          const va = r.rowA[c] ?? '';
+          if (dc.has(c)) {
+            const vb = r.rowB[c] ?? '';
+            return `<td class="cell-diff tooltip" data-tip="B: ${esc(String(vb))}">${esc(String(va))}</td>`;
+          }
+          return `<td>${esc(String(va))}</td>`;
+        }).join('') + lookupCells(r.rowB, lookups);
+      };
+
+  const MAX = 500;
+  if (filtered.length === 0) {
+    document.getElementById('result-body').innerHTML = '';
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('row-count').textContent = '';
+  } else {
+    document.getElementById('empty-state').style.display = 'none';
+    const sliced = filtered.slice(0, MAX);
+    document.getElementById('result-body').innerHTML = sliced.map(r => `<tr>${renderRow(r)}</tr>`).join('');
+    document.getElementById('row-count').textContent =
+      `Mostrando ${sliced.length.toLocaleString()} de ${filtered.length.toLocaleString()} registros`
+      + (filtered.length > MAX ? ` (máx ${MAX} en pantalla — exporta para ver todos)` : '');
+  }
+}
+
+let sortCol = null, sortAsc = true;
+function sortTable(col) {
+  if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; }
+  const rows = [...state.currentRows];
+  rows.sort((x, y) => {
+    const src = x.rowA || x.rowB, tgt = y.rowA || y.rowB;
+    const a = String(src[col] ?? ''), b = String(tgt[col] ?? '');
+    const n1 = parseFloat(a), n2 = parseFloat(b);
+    if (!isNaN(n1) && !isNaN(n2)) return sortAsc ? n1 - n2 : n2 - n1;
+    return sortAsc ? a.localeCompare(b) : b.localeCompare(a);
+  });
+  state.currentRows = rows;
+  const renderer = getRenderer(state.currentTab);
+  document.getElementById('result-body').innerHTML = rows.slice(0, 500).map(r => `<tr>${renderer(r)}</tr>`).join('');
+}
+
+function getRenderer(tab) {
+  const colsA = state.columns.a, colsB = state.columns.b;
+  const lookups = getLookupCols();
+  if (tab === 'only-b') return r => colsB.map(c => `<td>${esc(r.rowB[c] ?? '')}</td>`).join('');
+  return r => {
+    const dc = new Set((r.differences || []).map(d => d.col));
+    return colsA.map(c => {
+      const va = r.rowA[c] ?? '';
+      if (dc.has(c)) {
+        const vb = r.rowB[c] ?? '';
+        return `<td class="cell-diff tooltip" data-tip="B: ${esc(String(vb))}">${esc(String(va))}</td>`;
+      }
+      return `<td>${esc(String(va))}</td>`;
+    }).join('') + lookupCells(r.rowB, lookups);
+  };
+}
+
+function filterTable() {
+  renderTable(state.currentTab, document.getElementById('search-input').value);
+}
+
+// ═══════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════
+function exportExcel() {
+  const { allRows, onlyB, cntMatch, cntDiff, cntNoMatch } = state.results;
+  const colsB = state.columns.b, kp = state.keyPairs;
+  const lookups = getLookupCols();
+  const wb = XLSX.utils.book_new();
+
+  // Hoja principal: File A completo en orden original + columnas lookup
+  const mainData = allRows.map(r => {
+    const obj = { ...r.rowA };
+    lookups.forEach(l => { obj[l.label] = r.rowB?.[l.colB] ?? ''; });
+    return obj;
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mainData), 'Resultado');
+
+  // Hoja solo en B
+  if (onlyB.length)
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(onlyB), 'Solo en B');
+
+  const today = new Date().toLocaleDateString('es-CO');
+  const bankLabel = state.selectedBank === '__ALL__' ? 'Todos' : state.selectedBank;
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+    { Categoría: 'Total filas A',       Registros: allRows.length },
+    { Categoría: '✓ Exactos',           Registros: cntMatch },
+    { Categoría: '⚠ Con diferencias',   Registros: cntDiff },
+    { Categoría: '✗ Sin match en B',    Registros: cntNoMatch },
+    { Categoría: 'Solo en B',           Registros: onlyB.length },
+    { Categoría: 'Banco filtrado',      Registros: bankLabel },
+    { Categoría: 'Llaves',              Registros: kp.map(p => `${p.a}↔${p.b}`).join(', ') },
+    { Categoría: 'Fecha',               Registros: today },
+  ]), 'Resumen');
+
+  XLSX.writeFile(wb, `conciliacion_${bankLabel}_${today.replace(/\//g,'-')}.xlsx`);
+}
+
+// ═══════════════════════════════════════════
+// NAV HELPERS
+// ═══════════════════════════════════════════
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
+  document.getElementById(`sec-${name}`).classList.add('visible');
+}
+function setStep(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById(`step${i}`);
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  });
+}
+function goBack(to) {
+  if (to === 1) { showSection('upload'); setStep(1); }
+  if (to === 2) { showSection('keys'); setStep(2); }
+}
+function setStatus(msg, pct) {
+  document.getElementById('loading-bar').classList.add('active');
+  document.getElementById('loading-bar-inner').style.width = pct + '%';
+  document.getElementById('status-msg').textContent = msg;
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
