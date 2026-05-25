@@ -736,7 +736,7 @@ function goToKeys() {
   keyCount = 0;
 
   // Llaves predeterminadas (auto-detectadas en B; A se pone a "No disponible" si no existe)
-  const defaultBCols = ['bin', 'codigo_autorizacion', 'monto_transaccion', 'cuotas'];
+  const defaultBCols = ['bin', 'codigo_autorizacion', 'monto_transaccion'];
   defaultBCols.forEach(bCol => {
     if (state.columns.b.find(c => c.toLowerCase() === bCol.toLowerCase())) {
       addKeyRow(bCol);
