@@ -696,7 +696,7 @@ function addKeyRow() {
   div.innerHTML = `
     <div>
       <div class="key-index">Llave ${id}</div>
-      <select id="key-a-${id}">${colsA}</select>
+      <select id="key-a-${id}" onchange="checkKeyTransform(this, ${id})">${colsA}</select>
       <div style="font-size:11px;color:var(--gray);margin-top:3px">Columna en Archivo A</div>
     </div>
     <div>
@@ -761,7 +761,7 @@ function runConciliation(keyPairs) {
   setStatus('Indexando archivo B…', 20);
   const indexB = new Map();
   dataB.forEach((row, i) => {
-    const key = makeKey(row, keyPairs.map(p => p.b), 'b');
+    const key = makeKey(row, keyPairs, 'b');
     if (!indexB.has(key)) indexB.set(key, []);
     indexB.get(key).push({ row, i });
   });
@@ -771,7 +771,7 @@ function runConciliation(keyPairs) {
 
   // Resultado = File A en orden original, con lookup de B
   const allRows = dataA.map(rowA => {
-    const key = makeKey(rowA, keyPairs.map(p => p.a), 'a');
+    const key = makeKey(rowA, keyPairs, 'a');
     const bMatches = indexB.get(key);
     if (!bMatches || bMatches.length === 0) {
       return { rowA, rowB: null, status: 'no-match', differences: [] };
@@ -821,15 +821,18 @@ function runConciliation(keyPairs) {
 const CODIGO_AUTH_PATTERN = /cod.*aut|aut.*cod/i;
 
 function checkKeyTransform(sel, id) {
-  const col = sel?.value || '';
+  const colB = document.getElementById(`key-b-${id}`)?.value || '';
+  const colA = document.getElementById(`key-a-${id}`)?.value || '';
   const badge = document.getElementById(`key-transform-${id}`);
   if (!badge) return;
-  if (isCodAuth(col)) {
+  const isAuth = isCodAuth(colA) || isCodAuth(colB);
+  const isInt  = isIntCol(colA)  || isIntCol(colB);
+  if (isAuth) {
     badge.style.display = 'block';
-    badge.textContent = '⚙ DERECHA(CONCAT("000000";valor);6)';
-  } else if (isIntCol(col)) {
+    badge.textContent = '⚙ DERECHA(CONCAT("000000";valor);6) — ambos lados';
+  } else if (isInt) {
     badge.style.display = 'block';
-    badge.textContent = '⚙ INT(valor) — tratado como entero';
+    badge.textContent = '⚙ INT(valor) — entero en ambos lados';
   } else {
     badge.style.display = 'none';
   }
@@ -840,26 +843,42 @@ function isCodAuth(colName) {
 }
 
 // DERECHA(CONCAT("000000"; valor); 6)  →  últimos 6 dígitos, relleno de ceros a la izquierda
+// Usa parseFloat para manejar valores con decimales del formato Excel ('566224.00' → '566224')
 function padAuth(val) {
-  const s = String(val ?? '').trim().replace(/\s/g, '');
-  return ('000000' + s).slice(-6);
+  const s = String(val ?? '').trim().replace(/,/g, '');
+  const f = parseFloat(s);
+  const digits = !isNaN(f) ? String(Math.round(f)) : s.replace(/\D/g, '');
+  return ('000000' + digits).slice(-6);
 }
 
-function transformValue(col, val, side) {
-  if (isCodAuth(col)) return padAuth(val);        // DERECHA(CONCAT("000000";val);6)
-  if (isIntCol(col))  return normInt(val);         // entero: ignora .00, espacios, etc.
+// pairedCol: columna del lado opuesto del par de llave.
+// Si CUALQUIERA de los dos lados es INT o COD_AUTH, ambos aplican esa transformación.
+function transformValue(col, val, pairedCol) {
+  const auth = isCodAuth(col) || (pairedCol && isCodAuth(pairedCol));
+  const intc = isIntCol(col)  || (pairedCol && isIntCol(pairedCol));
+  if (auth) return padAuth(val);
+  if (intc) return normInt(val);
   return String(val ?? '').trim();
 }
 
 // Normaliza a entero como string (para llaves y comparaciones)
+// Usa parseFloat para manejar '85938.00', '85,938', etc. que Excel formatea con raw:false
 function normInt(val) {
-  const s = String(val ?? '').trim().replace(/[^\d-]/g, '');
-  const n = parseInt(s, 10);
-  return isNaN(n) ? String(val ?? '').trim().toLowerCase() : String(n);
+  const s = String(val ?? '').trim().replace(/,/g, ''); // quitar separadores de miles
+  const f = parseFloat(s);
+  if (!isNaN(f)) return String(Math.round(f));
+  // fallback: solo dígitos
+  const n = parseInt(s.replace(/[^\d-]/g, ''), 10);
+  return isNaN(n) ? s.toLowerCase() : String(n);
 }
 
-function makeKey(row, cols, side) {
-  return cols.map(c => transformValue(c, row[c], side).toLowerCase()).join('||');
+// keyPairs: [{a, b}] — makeKey necesita el par completo para conocer la columna pareada
+function makeKey(row, keyPairs, side) {
+  return keyPairs.map(pair => {
+    const col       = side === 'a' ? pair.a : pair.b;
+    const pairedCol = side === 'a' ? pair.b : pair.a;
+    return transformValue(col, row[col], pairedCol).toLowerCase();
+  }).join('||');
 }
 // Columnas que se comparan como entero (ignora decimales, espacios, .00, etc.)
 // Columnas que siempre se tratan como entero (llaves Y comparación de diferencias)
