@@ -30,6 +30,7 @@
   /* HEADER */
   .header { background: #090c14; color: var(--primary); padding: 18px 32px; display: flex; align-items: center; gap: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.5); border-bottom: 1px solid var(--gray-light); }
   .header-logo { font-size: 28px; font-weight: 900; letter-spacing: -1px; }
+  .mp-logo { height: 40px; width: auto; display: block; }
   .header h1 { font-size: 20px; font-weight: 700; color: var(--text); }
   .header span { color: var(--primary); }
 
@@ -188,7 +189,43 @@
 <body>
 
 <div class="header">
-  <div class="header-logo">PSJ</div>
+  <!-- Logo Mercado Pago -->
+  <svg class="mp-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" aria-label="Mercado Pago">
+    <defs>
+      <linearGradient id="mpOval" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#7FD8F5"/>
+        <stop offset="45%" stop-color="#00B1EA"/>
+        <stop offset="100%" stop-color="#55C9E8"/>
+      </linearGradient>
+      <clipPath id="mpClip">
+        <ellipse cx="54" cy="40" rx="47" ry="32"/>
+      </clipPath>
+    </defs>
+    <!-- Oval shadow -->
+    <ellipse cx="55" cy="41" rx="51" ry="34" fill="#00115A" opacity="0.25"/>
+    <!-- Oval fill -->
+    <ellipse cx="54" cy="40" rx="50" ry="33" fill="#00115A"/>
+    <ellipse cx="54" cy="40" rx="47" ry="30" fill="url(#mpOval)"/>
+    <!-- Horizontal stripe -->
+    <rect x="7" y="36" width="94" height="9" fill="#B3ECF9" clip-path="url(#mpClip)" opacity="0.55"/>
+    <!-- Left hand body -->
+    <path d="M10,50 L10,40 Q12,30 20,27 L28,24 Q31,23 33,25 L36,28 Q39,26 42,27 L44,30 Q47,28 50,30 L52,35 Q48,40 44,41 L38,43 L30,47 L22,50 Z" fill="white" clip-path="url(#mpClip)"/>
+    <!-- Left fingers -->
+    <path d="M28,24 L27,15 Q27,13 29,13 Q31,13 31,15 L31,22" fill="white" clip-path="url(#mpClip)"/>
+    <path d="M33,23 L32,13 Q32,11 34,11 Q36,11 36,13 L36,21" fill="white" clip-path="url(#mpClip)"/>
+    <path d="M39,23 L38,14 Q38,12 40,12 Q42,12 42,14 L42,22" fill="white" clip-path="url(#mpClip)"/>
+    <!-- Right hand body -->
+    <path d="M98,50 L98,40 Q96,30 88,27 L80,24 Q77,23 75,25 L72,28 Q69,26 66,27 L64,30 Q61,28 58,30 L56,35 Q60,40 64,41 L70,43 L78,47 L86,50 Z" fill="white" clip-path="url(#mpClip)"/>
+    <!-- Right fingers -->
+    <path d="M80,24 L81,15 Q81,13 79,13 Q77,13 77,15 L77,22" fill="white" clip-path="url(#mpClip)"/>
+    <path d="M75,23 L76,13 Q76,11 74,11 Q72,11 72,13 L72,21" fill="white" clip-path="url(#mpClip)"/>
+    <path d="M69,23 L70,14 Q70,12 68,12 Q66,12 66,14 L66,22" fill="white" clip-path="url(#mpClip)"/>
+    <!-- Text: mercado -->
+    <text x="114" y="35" font-family="'Arial Rounded MT Bold','Nunito','Arial Black',sans-serif" font-weight="900" font-size="23" fill="#00115A" letter-spacing="-0.3">mercado</text>
+    <!-- Text: pago -->
+    <text x="114" y="62" font-family="'Arial Rounded MT Bold','Nunito','Arial Black',sans-serif" font-weight="900" font-size="23" fill="#00115A" letter-spacing="-0.3">pago</text>
+  </svg>
+  <div style="width:1px; height:36px; background:var(--gray-light); margin: 0 4px;"></div>
   <div>
     <h1>Conciliador Automático <span>✦</span></h1>
   </div>
@@ -217,7 +254,7 @@
         <!-- ─── ARCHIVO A (local only) ─── -->
         <div>
           <div style="font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text)">
-            Archivo A <span style="font-weight:400; color:var(--gray)">— tu extracto / reporte interno</span>
+            Archivo A <span style="font-weight:400; color:var(--gray)">— Conciliación enviada por el partner</span>
           </div>
           <div class="file-zone" id="zone-a"
                ondragover="dragOver(event,'a')" ondragleave="dragLeave('a')" ondrop="dropFile(event,'a')">
@@ -237,7 +274,7 @@
         <!-- ─── ARCHIVO B (local + Drive) ─── -->
         <div>
           <div style="font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text)">
-            Archivo B <span style="font-weight:400; color:var(--gray)">— extracto bancario / referencia</span>
+            Archivo B <span style="font-weight:400; color:var(--gray)">— Conciliación interna Mercadopago</span>
           </div>
 
           <!-- Toggle fuente -->
@@ -375,10 +412,6 @@
         <div class="summary-card c-only-a" id="sc-only-a" onclick="switchTab('no-match')">
           <div class="summary-num" id="cnt-a">0</div>
           <div class="summary-label">✗ Sin match en B</div>
-        </div>
-        <div class="summary-card c-only-b" id="sc-only-b" onclick="switchTab('only-b')">
-          <div class="summary-num" id="cnt-b">0</div>
-          <div class="summary-label">Solo en B</div>
         </div>
       </div>
 
@@ -701,7 +734,16 @@ function goToKeys() {
   const c = document.getElementById('keys-container');
   c.innerHTML = '';
   keyCount = 0;
-  addKeyRow();
+
+  // Llaves predeterminadas (auto-detectadas en B; A se pone a "No disponible" si no existe)
+  const defaultBCols = ['bin', 'codigo_autorizacion', 'monto_transaccion', 'cuotas'];
+  defaultBCols.forEach(bCol => {
+    if (state.columns.b.find(c => c.toLowerCase() === bCol.toLowerCase())) {
+      addKeyRow(bCol);
+    }
+  });
+  // Si B no tenía ninguna de las columnas predeterminadas, agregar una fila en blanco
+  if (document.getElementById('keys-container').children.length === 0) addKeyRow();
 
   // Poblar selectores de cuotas
   const none = '<option value="">— Sin seleccionar —</option>';
@@ -714,10 +756,12 @@ function goToKeys() {
   document.getElementById('cuotas-col-b').value = autoB;
 }
 
-function addKeyRow() {
+// presetB: nombre de columna en B para pre-seleccionar (opcional)
+function addKeyRow(presetB) {
   keyCount++;
   const id = keyCount;
-  const colsA = state.columns.a.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const naOption = '<option value="__NA__">— No disponible —</option>';
+  const colsA = naOption + state.columns.a.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   const colsB = state.columns.b.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   const div = document.createElement('div');
   div.className = 'key-row';
@@ -738,11 +782,21 @@ function addKeyRow() {
     <button class="remove-key" onclick="removeKeyRow(${id})">✕</button>
   `;
   document.getElementById('keys-container').appendChild(div);
-  // Auto-match same column name
-  const aCol = state.columns.a[0] || '';
-  const match = state.columns.b.find(c => c.toLowerCase() === aCol.toLowerCase()) || state.columns.b[0] || '';
-  document.getElementById(`key-a-${id}`).value = aCol;
-  document.getElementById(`key-b-${id}`).value = match;
+
+  if (presetB) {
+    // Buscar columna B (case-insensitive)
+    const bMatch = state.columns.b.find(c => c.toLowerCase() === presetB.toLowerCase()) || state.columns.b[0] || '';
+    document.getElementById(`key-b-${id}`).value = bMatch;
+    // Buscar columna A con el mismo nombre; si no existe → No disponible
+    const aMatch = state.columns.a.find(c => c.toLowerCase() === presetB.toLowerCase()) || '__NA__';
+    document.getElementById(`key-a-${id}`).value = aMatch;
+  } else {
+    // Fila manual: auto-match por nombre
+    const aCol = state.columns.a[0] || '';
+    const bCol = state.columns.b.find(c => c.toLowerCase() === aCol.toLowerCase()) || state.columns.b[0] || '';
+    document.getElementById(`key-a-${id}`).value = aCol;
+    document.getElementById(`key-b-${id}`).value = bCol;
+  }
   checkKeyTransform(document.getElementById(`key-b-${id}`), id);
 }
 
@@ -758,7 +812,8 @@ function getKeyPairs() {
     const num = row.id.split('-').pop();
     const ka = document.getElementById(`key-a-${num}`)?.value;
     const kb = document.getElementById(`key-b-${num}`)?.value;
-    if (ka && kb) pairs.push({ a: ka, b: kb });
+    // Ignorar filas donde A es "No disponible"
+    if (ka && ka !== '__NA__' && kb && kb !== '__NA__') pairs.push({ a: ka, b: kb });
   });
   return pairs;
 }
@@ -939,8 +994,7 @@ function buildTabs() {
     { id: 'all',      label: 'Todos (A)',       count: total },
     { id: 'match',    label: '✓ Exacto',        count: cntMatch },
     { id: 'diff',     label: '⚠ Diferencias',  count: cntDiff },
-    { id: 'no-match', label: '✗ Sin match',     count: cntNoMatch },
-    { id: 'only-b',   label: 'Solo en B',       count: onlyB.length },
+    { id: 'no-match', label: '✗ Sin match en B', count: cntNoMatch },
   ];
   document.getElementById('tabs').innerHTML = tabs.map(t =>
     `<button class="tab" id="tab-${t.id}" onclick="switchTab('${t.id}')">${t.label} <span class="pill">${t.count.toLocaleString()}</span></button>`
@@ -953,7 +1007,7 @@ function switchTab(tab) {
   document.querySelectorAll('.summary-card').forEach(c => c.classList.remove('active'));
   document.getElementById(`tab-${tab}`)?.classList.add('active');
   // highlight summary card
-  const scMap = { match: 'sc-match', diff: 'sc-diff', 'no-match': 'sc-only-a', 'only-b': 'sc-only-b' };
+  const scMap = { match: 'sc-match', diff: 'sc-diff', 'no-match': 'sc-only-a' };
   if (scMap[tab]) document.getElementById(scMap[tab])?.classList.add('active');
   document.getElementById('search-input').value = '';
   renderTable(tab, '');
@@ -1026,16 +1080,10 @@ function renderTable(tab, search) {
   const lookups = getLookupCols();
 
   // Filtrar por pestaña
-  let rows, isOnlyB = false;
-  if (tab === 'only-b') {
-    isOnlyB = true;
-    rows = onlyB.map(rowB => ({ rowA: null, rowB, status: 'only-b', differences: [] }));
-  } else {
-    rows = tab === 'all' ? allRows
-         : tab === 'match'    ? allRows.filter(r => r.status === 'match')
-         : tab === 'diff'     ? allRows.filter(r => r.status === 'diff')
-         : /* no-match */       allRows.filter(r => r.status === 'no-match');
-  }
+  const rows = tab === 'all'      ? allRows
+             : tab === 'match'    ? allRows.filter(r => r.status === 'match')
+             : tab === 'diff'     ? allRows.filter(r => r.status === 'diff')
+             : /* no-match */       allRows.filter(r => r.status === 'no-match');
 
   const sq = search.toLowerCase();
   const filtered = sq
@@ -1047,17 +1095,14 @@ function renderTable(tab, search) {
   state.currentRows = filtered;
 
   // Cabeceras
-  const columns = isOnlyB ? colsB : colsA;
-  const lookupHeaders = isOnlyB ? '' : lookups.map(l =>
+  const lookupHeaders = lookups.map(l =>
     `<th style="background:#0a1929; color:#60a5fa; border-left:2px solid #1e3a5f">${esc(l.label)}</th>`
   ).join('');
   document.getElementById('result-head').innerHTML =
-    `<tr>${columns.map(c => `<th onclick="sortTable('${esc(c)}')">${esc(c)}</th>`).join('')}${lookupHeaders}</tr>`;
+    `<tr>${colsA.map(c => `<th onclick="sortTable('${esc(c)}')">${esc(c)}</th>`).join('')}${lookupHeaders}</tr>`;
 
   // Renderer de filas
-  const renderRow = isOnlyB
-    ? r => colsB.map(c => `<td>${esc(r.rowB[c] ?? '')}</td>`).join('')
-    : r => {
+  const renderRow = r => {
         const dc = new Set(r.differences.map(d => d.col));
         return colsA.map(c => {
           const va = r.rowA[c] ?? '';
@@ -1096,14 +1141,13 @@ function sortTable(col) {
     return sortAsc ? a.localeCompare(b) : b.localeCompare(a);
   });
   state.currentRows = rows;
-  const renderer = getRenderer(state.currentTab);
+  const renderer = getRenderer();
   document.getElementById('result-body').innerHTML = rows.slice(0, 500).map(r => `<tr>${renderer(r)}</tr>`).join('');
 }
 
-function getRenderer(tab) {
-  const colsA = state.columns.a, colsB = state.columns.b;
+function getRenderer() {
+  const colsA = state.columns.a;
   const lookups = getLookupCols();
-  if (tab === 'only-b') return r => colsB.map(c => `<td>${esc(r.rowB[c] ?? '')}</td>`).join('');
   return r => {
     const dc = new Set((r.differences || []).map(d => d.col));
     return colsA.map(c => {
