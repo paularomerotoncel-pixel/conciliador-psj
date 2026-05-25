@@ -960,19 +960,19 @@ function switchTab(tab) {
 }
 
 // ── Columnas lookup que se traen de B para filas con match ──────────────────
-// Retorna [{colB, label, isCuotas}]
+// Retorna [{colB, label, isCuotas, isObs}]
 function getLookupCols() {
   const colsB = state.columns.b;
   const defs = [
-    { pattern: /^status$/i,   label: 'Observaciones MP' },
-    { pattern: /^segmento$/i, label: 'segmento' },
+    { pattern: /^status$/i,   label: 'Observaciones MP', isObs: true },
+    { pattern: /^segmento$/i, label: 'segmento',         isObs: false },
   ];
   const result = defs
-    .map(d => ({ colB: colsB.find(c => d.pattern.test(c.trim())), label: d.label, isCuotas: false }))
+    .map(d => ({ colB: colsB.find(c => d.pattern.test(c.trim())), label: d.label, isCuotas: false, isObs: d.isObs }))
     .filter(x => x.colB);
   // "Cuotas MP" desde selección manual del paso 2
   if (state.cuotasCols?.b) {
-    result.push({ colB: state.cuotasCols.b, label: 'Cuotas MP', isCuotas: true });
+    result.push({ colB: state.cuotasCols.b, label: 'Cuotas MP', isCuotas: true, isObs: false });
   }
   return result;
 }
@@ -980,20 +980,41 @@ function getLookupCols() {
 // Celdas extra (lookup) para una fila — rowA se necesita para comparar cuotas
 function lookupCells(rowA, rowB, lookups) {
   return lookups.map(l => {
-    let val = String(rowB?.[l.colB] ?? '');
-    let style = 'background:#0d1a2e; color:#60a5fa; font-style:italic';
-    if (l.isCuotas && rowB) {
-      const colA = state.cuotasCols?.a;
-      const colB = state.cuotasCols?.b;
-      if (colA && colB) {
-        const va = normInt(rowA?.[colA] ?? '');
-        const vb = normInt(rowB?.[colB] ?? '');
-        if (va !== '' && vb !== '' && va !== vb) {
-          val = 'Revisar cuotas';
-          style = 'background:#3d1000; color:#f87171; font-weight:700';
+    const base = 'background:#0d1a2e; color:#60a5fa; font-style:italic';
+    const warn = 'background:#3d1000; color:#f87171; font-weight:700';
+
+    // Sin match → siempre vacío
+    if (!rowB) return `<td style="${base}"></td>`;
+
+    let val   = String(rowB[l.colB] ?? '');
+    let style = base;
+
+    if (l.isCuotas) {
+      // Cuotas MP: mostrar valor de B tal cual (ya hay match)
+      // val ya tiene el valor correcto
+
+    } else if (l.isObs) {
+      // Observaciones MP
+      const statusLow = val.trim().toLowerCase();
+      if (statusLow === 'tx devuelta') {
+        // Siempre mostrar "Tx devuelta" aunque las cuotas difieran
+        style = warn;
+      } else {
+        // Comparar cuotas como entero
+        const colA = state.cuotasCols?.a;
+        const colB = state.cuotasCols?.b;
+        if (colA && colB) {
+          const va = normInt(rowA?.[colA] ?? '');
+          const vb = normInt(rowB[colB]  ?? '');
+          if (va !== '' && vb !== '' && va !== vb) {
+            val   = 'Revisar cuotas';
+            style = warn;
+          }
+          // cuotas iguales → mostrar status sin cambios
         }
       }
     }
+
     return `<td style="${style}">${esc(val)}</td>`;
   }).join('');
 }
@@ -1092,7 +1113,7 @@ function getRenderer(tab) {
         return `<td class="cell-diff tooltip" data-tip="B: ${esc(String(vb))}">${esc(String(va))}</td>`;
       }
       return `<td>${esc(String(va))}</td>`;
-    }).join('') + lookupCells(r.rowB, lookups);
+    }).join('') + lookupCells(r.rowA, r.rowB, lookups);
   };
 }
 
@@ -1142,17 +1163,33 @@ function exportExcel() {
       const dataRow = firstRow + 1 + rowIdx;  // +1 para saltarse el header
       if (dataRow > range.e.r) return;        // no ir más allá de las filas existentes
       const cell = XLSX.utils.encode_cell({ r: dataRow, c: newColIdx });
-      let val = String(r.rowB?.[l.colB] ?? '');
-      // Cuotas MP: comparar como entero entre A y B
-      if (l.isCuotas && r.rowB) {
-        const colA = state.cuotasCols?.a;
-        const colB = state.cuotasCols?.b;
-        if (colA && colB) {
-          const va = normInt(r.rowA?.[colA] ?? '');
-          const vb = normInt(r.rowB?.[colB] ?? '');
-          if (va !== '' && vb !== '' && va !== vb) val = 'Revisar cuotas';
+      let val = '';
+
+      if (!r.rowB) {
+        // Sin match: siempre vacío
+        val = '';
+      } else if (l.isCuotas) {
+        // Cuotas MP: valor directo de B
+        val = String(r.rowB[l.colB] ?? '');
+      } else if (l.isObs) {
+        // Observaciones MP
+        const raw = String(r.rowB[l.colB] ?? '');
+        if (raw.trim().toLowerCase() === 'tx devuelta') {
+          val = raw.trim();
+        } else {
+          val = raw;
+          const colA = state.cuotasCols?.a;
+          const colB = state.cuotasCols?.b;
+          if (colA && colB) {
+            const va = normInt(r.rowA?.[colA] ?? '');
+            const vb = normInt(r.rowB[colB]  ?? '');
+            if (va !== '' && vb !== '' && va !== vb) val = 'Revisar cuotas';
+          }
         }
+      } else {
+        val = String(r.rowB[l.colB] ?? '');
       }
+
       ws[cell] = { t: 's', v: val };
     });
 
