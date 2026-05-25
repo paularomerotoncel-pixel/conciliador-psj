@@ -784,18 +784,14 @@ function addKeyRow(presetB) {
   document.getElementById('keys-container').appendChild(div);
 
   if (presetB) {
-    // Buscar columna B (case-insensitive)
+    // B se auto-selecciona; A siempre queda en "No disponible" para selección manual
     const bMatch = state.columns.b.find(c => c.toLowerCase() === presetB.toLowerCase()) || state.columns.b[0] || '';
     document.getElementById(`key-b-${id}`).value = bMatch;
-    // Buscar columna A con el mismo nombre; si no existe → No disponible
-    const aMatch = state.columns.a.find(c => c.toLowerCase() === presetB.toLowerCase()) || '__NA__';
-    document.getElementById(`key-a-${id}`).value = aMatch;
+    document.getElementById(`key-a-${id}`).value = '__NA__';
   } else {
-    // Fila manual: auto-match por nombre
-    const aCol = state.columns.a[0] || '';
-    const bCol = state.columns.b.find(c => c.toLowerCase() === aCol.toLowerCase()) || state.columns.b[0] || '';
-    document.getElementById(`key-a-${id}`).value = aCol;
-    document.getElementById(`key-b-${id}`).value = bCol;
+    // Fila agregada manualmente: primera columna de cada archivo
+    document.getElementById(`key-a-${id}`).value = '__NA__';
+    document.getElementById(`key-b-${id}`).value = state.columns.b[0] || '';
   }
   checkKeyTransform(document.getElementById(`key-b-${id}`), id);
 }
