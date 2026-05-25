@@ -535,6 +535,7 @@ function loadFile(side, file) {
       const wb = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
       state[side].wb = wb;
       state[side].name = file.name;
+      if (side === 'a') state[side].rawBytes = data;  // guardar bytes originales para exportar
       const sheets = wb.SheetNames;
       if (sheets.length > 1) {
         const sel = document.getElementById(`sheet-${side}`);
@@ -822,7 +823,16 @@ const CODIGO_AUTH_PATTERN = /cod.*aut|aut.*cod/i;
 function checkKeyTransform(sel, id) {
   const col = sel?.value || '';
   const badge = document.getElementById(`key-transform-${id}`);
-  if (badge) badge.style.display = isCodAuth(col) ? 'block' : 'none';
+  if (!badge) return;
+  if (isCodAuth(col)) {
+    badge.style.display = 'block';
+    badge.textContent = '⚙ DERECHA(CONCAT("000000";valor);6)';
+  } else if (isIntCol(col)) {
+    badge.style.display = 'block';
+    badge.textContent = '⚙ INT(valor) — tratado como entero';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 function isCodAuth(colName) {
@@ -836,28 +846,33 @@ function padAuth(val) {
 }
 
 function transformValue(col, val, side) {
-  if (isCodAuth(col)) return padAuth(val);   // aplica en A y en B
+  if (isCodAuth(col)) return padAuth(val);        // DERECHA(CONCAT("000000";val);6)
+  if (isIntCol(col))  return normInt(val);         // entero: ignora .00, espacios, etc.
   return String(val ?? '').trim();
+}
+
+// Normaliza a entero como string (para llaves y comparaciones)
+function normInt(val) {
+  const s = String(val ?? '').trim().replace(/[^\d-]/g, '');
+  const n = parseInt(s, 10);
+  return isNaN(n) ? String(val ?? '').trim().toLowerCase() : String(n);
 }
 
 function makeKey(row, cols, side) {
   return cols.map(c => transformValue(c, row[c], side).toLowerCase()).join('||');
 }
 // Columnas que se comparan como entero (ignora decimales, espacios, .00, etc.)
-const INT_COL_PATTERN = /bin|monto.*aut|aut.*monto|ultimos.*dig|dig.*ultimos|cuotas/i;
+// Columnas que siempre se tratan como entero (llaves Y comparación de diferencias)
+const INT_COL_PATTERN = /bin|monto.*aut|aut.*monto|monto.*trans|trans.*monto|ultimos.*dig|dig.*ultimos|cuotas/i;
 
 function isIntCol(colName) {
   return INT_COL_PATTERN.test(String(colName).normalize('NFD').replace(/[̀-ͯ]/g,''));
 }
 
-// Normalización para comparar diferencias
+// Normalización para comparar diferencias (reutiliza normInt)
 function normForCol(col, v) {
-  const s = String(v ?? '').trim();
-  if (isIntCol(col)) {
-    const n = parseInt(s.replace(/[^\d-]/g,''), 10);
-    return isNaN(n) ? s.toLowerCase() : String(n);
-  }
-  return s.toLowerCase();
+  if (isIntCol(col)) return normInt(v);
+  return String(v ?? '').trim().toLowerCase();
 }
 
 function norm(v) { return String(v ?? '').trim().toLowerCase(); }
@@ -1018,37 +1033,56 @@ function filterTable() {
 // EXPORT
 // ═══════════════════════════════════════════
 function exportExcel() {
-  const { allRows, onlyB, cntMatch, cntDiff, cntNoMatch } = state.results;
-  const colsB = state.columns.b, kp = state.keyPairs;
+  const { allRows, cntMatch, cntDiff, cntNoMatch } = state.results;
+  const kp = state.keyPairs;
   const lookups = getLookupCols();
-  const wb = XLSX.utils.book_new();
-
-  // Hoja principal: File A completo en orden original + columnas lookup
-  const mainData = allRows.map(r => {
-    const obj = { ...r.rowA };
-    lookups.forEach(l => { obj[l.label] = r.rowB?.[l.colB] ?? ''; });
-    return obj;
-  });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mainData), 'Resultado');
-
-  // Hoja solo en B
-  if (onlyB.length)
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(onlyB), 'Solo en B');
-
   const today = new Date().toLocaleDateString('es-CO');
   const bankLabel = state.selectedBank === '__ALL__' ? 'Todos' : state.selectedBank;
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-    { Categoría: 'Total filas A',       Registros: allRows.length },
-    { Categoría: '✓ Exactos',           Registros: cntMatch },
-    { Categoría: '⚠ Con diferencias',   Registros: cntDiff },
-    { Categoría: '✗ Sin match en B',    Registros: cntNoMatch },
-    { Categoría: 'Solo en B',           Registros: onlyB.length },
-    { Categoría: 'Banco filtrado',      Registros: bankLabel },
-    { Categoría: 'Llaves',              Registros: kp.map(p => `${p.a}↔${p.b}`).join(', ') },
-    { Categoría: 'Fecha',               Registros: today },
-  ]), 'Resumen');
 
-  XLSX.writeFile(wb, `conciliacion_${bankLabel}_${today.replace(/\//g,'-')}.xlsx`);
+  // ── Clonar el workbook original del Archivo A (preserva TODAS las hojas) ──
+  // Re-parsear desde los bytes originales guardados en state.a.rawBytes
+  let wb;
+  if (state.a.rawBytes) {
+    wb = XLSX.read(state.a.rawBytes, { type: 'array', cellDates: true, raw: false });
+  } else {
+    // Fallback: crear workbook desde cero si no hay bytes originales
+    wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([]), state.a.sheetName || 'Hoja1');
+  }
+
+  // ── Editar SOLO la hoja seleccionada ──
+  const targetSheet = state.a.sheetName;
+  const ws = wb.Sheets[targetSheet];
+
+  // Obtener el rango actual de la hoja
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  const lastCol = range.e.c;      // última columna con datos
+  const firstRow = range.s.r;     // fila de encabezados (usualmente 0)
+
+  // Encontrar el índice de columna para agregar los nuevos headers
+  // Los headers nuevos van después de la última columna existente
+  lookups.forEach((l, li) => {
+    const newColIdx = lastCol + 1 + li;
+    const headerCell = XLSX.utils.encode_cell({ r: firstRow, c: newColIdx });
+    ws[headerCell] = { t: 's', v: l.label };
+
+    // Para cada fila de datos, agregar el valor del lookup
+    allRows.forEach((r, rowIdx) => {
+      const dataRow = firstRow + 1 + rowIdx;  // +1 para saltarse el header
+      if (dataRow > range.e.r) return;        // no ir más allá de las filas existentes
+      const cell = XLSX.utils.encode_cell({ r: dataRow, c: newColIdx });
+      const val = r.rowB?.[l.colB] ?? '';
+      ws[cell] = { t: 's', v: String(val) };
+    });
+
+    // Actualizar el rango de la hoja
+    range.e.c = newColIdx;
+  });
+
+  // Actualizar !ref con el nuevo rango
+  ws['!ref'] = XLSX.utils.encode_range(range);
+
+  XLSX.writeFile(wb, `conciliacion_${bankLabel}_${today.replace(/\//g, '-')}.xlsx`);
 }
 
 // ═══════════════════════════════════════════
