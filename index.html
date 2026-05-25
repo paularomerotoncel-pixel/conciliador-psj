@@ -326,6 +326,24 @@
         </div>
         <div id="keys-container"></div>
       </div>
+      <!-- ─── COMPARACIÓN DE CUOTAS ─── -->
+      <div style="margin-top:20px; padding:16px 18px; background:#1a1000; border:1.5px solid var(--diff); border-radius:10px;">
+        <div style="font-size:13px; font-weight:700; margin-bottom:6px; color:var(--diff);">⚖ Comparación de cuotas</div>
+        <p style="font-size:12px; color:var(--gray); margin-bottom:12px;">
+          Selecciona la columna de cuotas en cada archivo. Si los valores no coinciden como enteros, la columna <strong>"Cuotas MP"</strong> mostrará <em>"Revisar cuotas"</em>.
+        </p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <div style="font-size:11px; color:var(--gray); margin-bottom:4px; font-weight:600;">Cuotas — Archivo A</div>
+            <select id="cuotas-col-a"></select>
+          </div>
+          <div>
+            <div style="font-size:11px; color:var(--gray); margin-bottom:4px; font-weight:600;">Cuotas — Archivo B</div>
+            <select id="cuotas-col-b"></select>
+          </div>
+        </div>
+      </div>
+
       <div style="display:flex; justify-content:space-between; margin-top:20px">
         <button class="btn btn-secondary" onclick="goBack(1)">← Volver</button>
         <button class="btn btn-primary" id="btn-conciliar" onclick="conciliar()">⚡ Conciliar</button>
@@ -408,6 +426,7 @@ const state = {
   keyPairs: [],
   selectedBank: '__ALL__',
   bSource: 'local',          // 'local' | 'drive'
+  cuotasCols: { a: '', b: '' },  // columnas seleccionadas para comparar cuotas
 };
 
 // ═══════════════════════════════════════════
@@ -683,6 +702,16 @@ function goToKeys() {
   c.innerHTML = '';
   keyCount = 0;
   addKeyRow();
+
+  // Poblar selectores de cuotas
+  const none = '<option value="">— Sin seleccionar —</option>';
+  document.getElementById('cuotas-col-a').innerHTML = none + state.columns.a.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  document.getElementById('cuotas-col-b').innerHTML = none + state.columns.b.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // Auto-detectar columna de cuotas
+  const autoA = state.columns.a.find(c => /cuotas/i.test(c)) || '';
+  const autoB = state.columns.b.find(c => /cuotas/i.test(c)) || '';
+  document.getElementById('cuotas-col-a').value = autoA;
+  document.getElementById('cuotas-col-b').value = autoB;
 }
 
 function addKeyRow() {
@@ -741,6 +770,10 @@ function conciliar() {
   const keyPairs = getKeyPairs();
   if (!keyPairs.length) { alert('Agrega al menos una llave de cruce.'); return; }
   state.keyPairs = keyPairs;
+  state.cuotasCols = {
+    a: document.getElementById('cuotas-col-a')?.value || '',
+    b: document.getElementById('cuotas-col-b')?.value || '',
+  };
   showSection('results');
   setStep(3);
   document.getElementById('results-body').style.display = 'none';
@@ -927,24 +960,42 @@ function switchTab(tab) {
 }
 
 // ── Columnas lookup que se traen de B para filas con match ──────────────────
-// Busca en colsB y retorna [{colB, label}]
+// Retorna [{colB, label, isCuotas}]
 function getLookupCols() {
   const colsB = state.columns.b;
   const defs = [
-    { pattern: /^status$/i,    label: 'Observaciones MP' },
-    { pattern: /^segmento$/i,  label: 'segmento' },
-    { pattern: /^cuotas$/i,    label: 'cuotas' },
+    { pattern: /^status$/i,   label: 'Observaciones MP' },
+    { pattern: /^segmento$/i, label: 'segmento' },
   ];
-  return defs
-    .map(d => ({ colB: colsB.find(c => d.pattern.test(c.trim())), label: d.label }))
-    .filter(x => x.colB);           // solo las que existen en B
+  const result = defs
+    .map(d => ({ colB: colsB.find(c => d.pattern.test(c.trim())), label: d.label, isCuotas: false }))
+    .filter(x => x.colB);
+  // "Cuotas MP" desde selección manual del paso 2
+  if (state.cuotasCols?.b) {
+    result.push({ colB: state.cuotasCols.b, label: 'Cuotas MP', isCuotas: true });
+  }
+  return result;
 }
 
-// Celdas extra (lookup) para una fila con match
-function lookupCells(rowB, lookups) {
-  return lookups.map(l =>
-    `<td style="background:#0d1a2e; color:#60a5fa; font-style:italic">${esc(String(rowB?.[l.colB] ?? ''))}</td>`
-  ).join('');
+// Celdas extra (lookup) para una fila — rowA se necesita para comparar cuotas
+function lookupCells(rowA, rowB, lookups) {
+  return lookups.map(l => {
+    let val = String(rowB?.[l.colB] ?? '');
+    let style = 'background:#0d1a2e; color:#60a5fa; font-style:italic';
+    if (l.isCuotas && rowB) {
+      const colA = state.cuotasCols?.a;
+      const colB = state.cuotasCols?.b;
+      if (colA && colB) {
+        const va = normInt(rowA?.[colA] ?? '');
+        const vb = normInt(rowB?.[colB] ?? '');
+        if (va !== '' && vb !== '' && va !== vb) {
+          val = 'Revisar cuotas';
+          style = 'background:#3d1000; color:#f87171; font-weight:700';
+        }
+      }
+    }
+    return `<td style="${style}">${esc(val)}</td>`;
+  }).join('');
 }
 
 function renderTable(tab, search) {
@@ -994,7 +1045,7 @@ function renderTable(tab, search) {
             return `<td class="cell-diff tooltip" data-tip="B: ${esc(String(vb))}">${esc(String(va))}</td>`;
           }
           return `<td>${esc(String(va))}</td>`;
-        }).join('') + lookupCells(r.rowB, lookups);
+        }).join('') + lookupCells(r.rowA, r.rowB, lookups);
       };
 
   const MAX = 500;
@@ -1091,8 +1142,18 @@ function exportExcel() {
       const dataRow = firstRow + 1 + rowIdx;  // +1 para saltarse el header
       if (dataRow > range.e.r) return;        // no ir más allá de las filas existentes
       const cell = XLSX.utils.encode_cell({ r: dataRow, c: newColIdx });
-      const val = r.rowB?.[l.colB] ?? '';
-      ws[cell] = { t: 's', v: String(val) };
+      let val = String(r.rowB?.[l.colB] ?? '');
+      // Cuotas MP: comparar como entero entre A y B
+      if (l.isCuotas && r.rowB) {
+        const colA = state.cuotasCols?.a;
+        const colB = state.cuotasCols?.b;
+        if (colA && colB) {
+          const va = normInt(r.rowA?.[colA] ?? '');
+          const vb = normInt(r.rowB?.[colB] ?? '');
+          if (va !== '' && vb !== '' && va !== vb) val = 'Revisar cuotas';
+        }
+      }
+      ws[cell] = { t: 's', v: val };
     });
 
     // Actualizar el rango de la hoja
