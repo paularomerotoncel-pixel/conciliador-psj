@@ -265,16 +265,29 @@
 
           <!-- DRIVE -->
           <div id="src-drive" style="display:none">
+            <!-- Acceso rápido (aparece si hay un link guardado) -->
+            <div id="drive-quick" style="display:none; margin-bottom:10px; padding:10px 14px; background:#0d2a1e; border:1.5px solid #34d399; border-radius:10px;">
+              <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:6px;">⚡ Acceso rápido</div>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:0; font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="drive-quick-name">—</div>
+                <button class="btn-load-drive" style="padding:7px 14px; font-size:12px;" onclick="loadFromDriveSaved()">▶ Cargar</button>
+                <button onclick="clearDriveSaved()" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:18px; line-height:1; padding:0 2px;" title="Quitar acceso rápido">✕</button>
+              </div>
+            </div>
+
             <div class="drive-input-wrap visible" id="drive-input-wrap">
+              <div style="font-size:11px; color:var(--gray); margin-bottom:5px; font-weight:600;">O ingresa un link de Google Drive / Sheets:</div>
               <div class="drive-input-row">
                 <input class="drive-url-input" id="drive-url" type="text"
                        placeholder="Pega el link de Google Sheets o Drive…"
                        onkeydown="if(event.key==='Enter') loadFromDrive()">
                 <button class="btn-load-drive" onclick="loadFromDrive()">Cargar</button>
               </div>
-              <div class="drive-hint">
-                ℹ️ El archivo debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>.
-                Funciona con Google Sheets y archivos .xlsx/.csv subidos a Drive.
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                <div class="drive-hint">
+                  ℹ️ El archivo debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>.
+                </div>
+                <button id="btn-save-drive" onclick="saveDriveLink()" style="display:none; background:none; border:1px solid #34d399; color:#34d399; border-radius:6px; font-size:11px; font-weight:700; padding:3px 10px; cursor:pointer; white-space:nowrap;">💾 Guardar acceso rápido</button>
               </div>
               <div class="drive-loading" id="drive-loading">
                 <div class="spinner"></div> Descargando desde Drive…
@@ -434,6 +447,7 @@ function setSource(src) {
   document.getElementById('src-btn-drive').classList.toggle('active', src === 'drive');
   document.getElementById('src-local').style.display = src === 'local' ? 'block' : 'none';
   document.getElementById('src-drive').style.display = src === 'drive' ? 'block' : 'none';
+  if (src === 'drive') renderDriveQuick();
   // Reset B if switching source
   resetB();
 }
@@ -459,6 +473,46 @@ function resetB() {
   document.getElementById('drive-loading').classList.remove('visible');
   checkReady();
 }
+
+// ═══════════════════════════════════════════
+// ACCESO RÁPIDO — localStorage
+// ═══════════════════════════════════════════
+const DRIVE_SAVED_KEY = 'conciliador_drive_url';
+
+function renderDriveQuick() {
+  const saved = localStorage.getItem(DRIVE_SAVED_KEY);
+  const box   = document.getElementById('drive-quick');
+  const name  = document.getElementById('drive-quick-name');
+  if (saved && box) {
+    box.style.display = 'block';
+    if (name) name.textContent = extractDriveFileName(saved) + ' — ' + saved.substring(0, 60) + (saved.length > 60 ? '…' : '');
+  } else if (box) {
+    box.style.display = 'none';
+  }
+}
+
+function saveDriveLink() {
+  const url = document.getElementById('drive-url').value.trim();
+  if (!url) return;
+  localStorage.setItem(DRIVE_SAVED_KEY, url);
+  document.getElementById('btn-save-drive').style.display = 'none';
+  renderDriveQuick();
+}
+
+function clearDriveSaved() {
+  localStorage.removeItem(DRIVE_SAVED_KEY);
+  renderDriveQuick();
+}
+
+async function loadFromDriveSaved() {
+  const url = localStorage.getItem(DRIVE_SAVED_KEY);
+  if (!url) return;
+  document.getElementById('drive-url').value = url;
+  await loadFromDrive();
+}
+
+// Mostrar acceso rápido al cambiar a modo Drive
+const _origSetSource = typeof setSource === 'function' ? setSource : null;
 
 // ═══════════════════════════════════════════
 // LOAD FROM DRIVE
@@ -506,6 +560,11 @@ async function loadFromDrive() {
       <div class="file-info">${state.b.data.length.toLocaleString()} filas · ${state.columns.b.length} columnas · desde Drive</div>
       <button class="remove-file" onclick="resetB()" style="z-index:3">✕</button>
     `;
+
+    // Mostrar botón "Guardar acceso rápido" si el link no está ya guardado
+    const saved = localStorage.getItem(DRIVE_SAVED_KEY);
+    const btnSave = document.getElementById('btn-save-drive');
+    if (btnSave) btnSave.style.display = (saved === url) ? 'none' : 'inline-block';
 
     checkBankColumn();
     checkReady();
@@ -1233,6 +1292,9 @@ function setStatus(msg, pct) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// Inicializar acceso rápido al cargar la página
+document.addEventListener('DOMContentLoaded', () => { renderDriveQuick(); });
 </script>
 </body>
 </html>
