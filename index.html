@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conciliador Automático</title>
+<title>Conciliador Automático PSJ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
@@ -190,7 +190,7 @@
 
 <div class="header">
   <div>
-    <h1>Conciliador Automático <span>✦</span></h1>
+    <h1>Conciliador Automático PSJ <span>✦</span></h1>
   </div>
 </div>
 
@@ -234,129 +234,19 @@
           </div>
         </div>
 
-        <!-- ─── ARCHIVO B (local + Drive) ─── -->
+        <!-- ─── ARCHIVO B ─── -->
         <div>
           <div style="font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text)">
             Archivo B <span style="font-weight:400; color:var(--gray)">— Conciliación interna Mercadopago</span>
           </div>
 
-          <!-- Toggle fuente -->
-          <div class="source-toggle">
-            <button class="source-btn active" id="src-btn-local" onclick="setSource('local')">
-              💾 Desde mi equipo
-            </button>
-            <button class="source-btn" id="src-btn-drive" onclick="setSource('drive')">
-              🟢 Google Drive / Sheets
-            </button>
-            <button class="source-btn" id="src-btn-script" onclick="setSource('script')">
-              ⚡ Desde la fuente
-            </button>
-          </div>
-
-          <!-- LOCAL -->
-          <div id="src-local">
-            <div class="file-zone" id="zone-b"
-                 ondragover="dragOver(event,'b')" ondragleave="dragLeave('b')" ondrop="dropFile(event,'b')">
-              <input type="file" id="input-b" accept=".xlsx,.xls,.csv" onchange="loadFile('b', this.files[0])">
-              <div id="zone-b-content">
-                <div class="file-icon">📄</div>
-                <div class="file-label">Archivo B</div>
-                <div class="file-sublabel">Arrastra aquí o haz clic<br>.xlsx · .xls · .csv</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- DRIVE -->
-          <div id="src-drive" style="display:none">
-            <!-- Acceso rápido (aparece si hay un link guardado) -->
-            <div id="drive-quick" style="display:none; margin-bottom:10px; padding:10px 14px; background:#0d2a1e; border:1.5px solid #34d399; border-radius:10px;">
-              <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:6px;">⚡ Acceso rápido</div>
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:0; font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="drive-quick-name">—</div>
-                <button class="btn-load-drive" style="padding:7px 14px; font-size:12px;" onclick="loadFromDriveSaved()">▶ Cargar</button>
-                <button onclick="clearDriveSaved()" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:18px; line-height:1; padding:0 2px;" title="Quitar acceso rápido">✕</button>
-              </div>
-            </div>
-
-            <div class="drive-input-wrap visible" id="drive-input-wrap">
-              <div style="font-size:11px; color:var(--gray); margin-bottom:5px; font-weight:600;">O ingresa un link de Google Drive / Sheets:</div>
-              <div class="drive-input-row">
-                <input class="drive-url-input" id="drive-url" type="text"
-                       placeholder="Pega el link de Google Sheets o Drive…"
-                       onkeydown="if(event.key==='Enter') loadFromDrive()">
-                <button class="btn-load-drive" onclick="loadFromDrive()">Cargar</button>
-              </div>
-              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
-                <div class="drive-hint">
-                  ℹ️ El archivo debe estar compartido como <strong>"Cualquier persona con el enlace puede ver"</strong>.
-                </div>
-                <button id="btn-save-drive" onclick="saveDriveLink()" style="display:none; background:none; border:1px solid #34d399; color:#34d399; border-radius:6px; font-size:11px; font-weight:700; padding:3px 10px; cursor:pointer; white-space:nowrap;">💾 Guardar acceso rápido</button>
-              </div>
-              <div class="drive-loading" id="drive-loading">
-                <div class="spinner"></div> Descargando desde Drive…
-              </div>
-            </div>
-            <!-- Zone B (Drive loaded) -->
-            <div class="file-zone" id="zone-b-drive" style="display:none; margin-top:8px">
-              <div id="zone-b-drive-content"></div>
-            </div>
-          </div>
-
-          <!-- DESDE LA FUENTE (Google Apps Script) -->
-          <div id="src-script" style="display:none">
-            <!-- URL guardada -->
-            <div id="script-quick" style="display:none; margin-bottom:10px; padding:10px 14px; background:#0d2a1e; border:1.5px solid #34d399; border-radius:10px;">
-              <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:4px;">⚡ Fuente configurada</div>
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:0; font-size:11px; color:var(--gray); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="script-url-label">—</div>
-                <button class="btn-load-drive" style="padding:7px 14px; font-size:12px;" onclick="loadFromScript()">🔄 Cargar datos frescos</button>
-                <button onclick="clearScriptUrl()" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:18px; line-height:1; padding:0 2px;" title="Quitar">✕</button>
-              </div>
-            </div>
-
-            <!-- Configuración (aparece si no hay URL guardada) -->
-            <div id="script-setup">
-              <div style="font-size:12px; color:var(--gray); margin-bottom:10px; line-height:1.6;">
-                Pega la URL de tu <strong>Google Apps Script</strong> desplegado. Los datos se cargarán siempre frescos desde el archivo fuente.
-                <br><span style="color:var(--diff); font-size:11px;">▶ ¿Cómo configurarlo? Haz clic en "Ver instrucciones" abajo.</span>
-              </div>
-              <div class="drive-input-row">
-                <input class="drive-url-input" id="script-url" type="text"
-                       placeholder="https://script.google.com/macros/s/…/exec"
-                       onkeydown="if(event.key==='Enter') saveAndLoadScript()">
-                <button class="btn-load-drive" onclick="saveAndLoadScript()">Guardar y cargar</button>
-              </div>
-              <div style="margin-top:8px;">
-                <button onclick="toggleScriptInstructions()" style="background:none; border:none; color:var(--only-a); font-size:11px; font-weight:700; cursor:pointer; padding:0;">📋 Ver instrucciones para configurar Apps Script</button>
-              </div>
-              <div id="script-instructions" style="display:none; margin-top:10px; padding:12px 14px; background:#0a1929; border-radius:8px; border:1px solid #1e3a5f; font-size:11px; color:var(--gray); line-height:1.7;">
-                <strong style="color:var(--only-a);">Configuración única — 2 minutos:</strong><br>
-                1. Abre tu Google Sheets (Archivo B) → <strong>Extensiones → Apps Script</strong><br>
-                2. Borra el código existente y pega este:<br>
-                <pre style="background:#090c14; padding:10px; border-radius:6px; margin:8px 0; overflow-x:auto; font-size:10px; color:#34d399;">function doGet() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data  = sheet.getDataRange().getValues();
-  var cols  = data[0];
-  var rows  = data.slice(1).map(function(r) {
-    var o = {}; cols.forEach(function(c,i){ o[c]=r[i]; }); return o;
-  });
-  return ContentService
-    .createTextOutput(JSON.stringify(rows))
-    .setMimeType(ContentService.MimeType.JSON);
-}</pre>
-                3. Clic en <strong>Implementar → Nueva implementación</strong><br>
-                4. Tipo: <strong>Aplicación web</strong> · Ejecutar como: <strong>Yo</strong> · Acceso: <strong>Cualquiera</strong><br>
-                5. Copia la URL que empieza con <code>https://script.google.com/macros/s/…</code><br>
-                6. Pégala arriba y haz clic en <strong>Guardar y cargar</strong>
-              </div>
-              <div class="drive-loading" id="script-loading" style="margin-top:8px;">
-                <div class="spinner"></div> Cargando datos desde la fuente…
-              </div>
-            </div>
-
-            <!-- Zone resultado script -->
-            <div class="file-zone" id="zone-b-script" style="display:none; margin-top:8px">
-              <div id="zone-b-script-content"></div>
+          <div class="file-zone" id="zone-b"
+               ondragover="dragOver(event,'b')" ondragleave="dragLeave('b')" ondrop="dropFile(event,'b')">
+            <input type="file" id="input-b" accept=".xlsx,.xls,.csv" onchange="loadFile('b', this.files[0])">
+            <div id="zone-b-content">
+              <div class="file-icon">📄</div>
+              <div class="file-label">Archivo B</div>
+              <div class="file-sublabel">Arrastra aquí o haz clic<br>.xlsx · .xls · .csv</div>
             </div>
           </div>
 
@@ -504,13 +394,6 @@ const state = {
 // ═══════════════════════════════════════════
 function setSource(src) {
   state.bSource = src;
-  ['local','drive','script'].forEach(s => {
-    document.getElementById(`src-btn-${s}`)?.classList.toggle('active', s === src);
-    document.getElementById(`src-${s}`).style.display = s === src ? 'block' : 'none';
-  });
-  if (src === 'drive')  renderDriveQuick();
-  if (src === 'script') renderScriptQuick();
-  resetB();
 }
 
 function resetB() {
@@ -528,14 +411,6 @@ function resetB() {
   const rm = document.getElementById('zone-b')?.querySelector('.remove-file');
   if (rm) rm.remove();
   document.getElementById('input-b').value = '';
-  // Reset drive zone
-  const zbd = document.getElementById('zone-b-drive');
-  if (zbd) zbd.style.display = 'none';
-  document.getElementById('drive-url').value = '';
-  document.getElementById('drive-loading').classList.remove('visible');
-  // Reset script zone
-  const zbs = document.getElementById('zone-b-script');
-  if (zbs) zbs.style.display = 'none';
   checkReady();
 }
 
