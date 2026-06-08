@@ -248,6 +248,9 @@
             <button class="source-btn" id="src-btn-drive" onclick="setSource('drive')">
               🟢 Google Drive / Sheets
             </button>
+            <button class="source-btn" id="src-btn-script" onclick="setSource('script')">
+              ⚡ Desde la fuente
+            </button>
           </div>
 
           <!-- LOCAL -->
@@ -296,6 +299,64 @@
             <!-- Zone B (Drive loaded) -->
             <div class="file-zone" id="zone-b-drive" style="display:none; margin-top:8px">
               <div id="zone-b-drive-content"></div>
+            </div>
+          </div>
+
+          <!-- DESDE LA FUENTE (Google Apps Script) -->
+          <div id="src-script" style="display:none">
+            <!-- URL guardada -->
+            <div id="script-quick" style="display:none; margin-bottom:10px; padding:10px 14px; background:#0d2a1e; border:1.5px solid #34d399; border-radius:10px;">
+              <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:4px;">⚡ Fuente configurada</div>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:0; font-size:11px; color:var(--gray); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="script-url-label">—</div>
+                <button class="btn-load-drive" style="padding:7px 14px; font-size:12px;" onclick="loadFromScript()">🔄 Cargar datos frescos</button>
+                <button onclick="clearScriptUrl()" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:18px; line-height:1; padding:0 2px;" title="Quitar">✕</button>
+              </div>
+            </div>
+
+            <!-- Configuración (aparece si no hay URL guardada) -->
+            <div id="script-setup">
+              <div style="font-size:12px; color:var(--gray); margin-bottom:10px; line-height:1.6;">
+                Pega la URL de tu <strong>Google Apps Script</strong> desplegado. Los datos se cargarán siempre frescos desde el archivo fuente.
+                <br><span style="color:var(--diff); font-size:11px;">▶ ¿Cómo configurarlo? Haz clic en "Ver instrucciones" abajo.</span>
+              </div>
+              <div class="drive-input-row">
+                <input class="drive-url-input" id="script-url" type="text"
+                       placeholder="https://script.google.com/macros/s/…/exec"
+                       onkeydown="if(event.key==='Enter') saveAndLoadScript()">
+                <button class="btn-load-drive" onclick="saveAndLoadScript()">Guardar y cargar</button>
+              </div>
+              <div style="margin-top:8px;">
+                <button onclick="toggleScriptInstructions()" style="background:none; border:none; color:var(--only-a); font-size:11px; font-weight:700; cursor:pointer; padding:0;">📋 Ver instrucciones para configurar Apps Script</button>
+              </div>
+              <div id="script-instructions" style="display:none; margin-top:10px; padding:12px 14px; background:#0a1929; border-radius:8px; border:1px solid #1e3a5f; font-size:11px; color:var(--gray); line-height:1.7;">
+                <strong style="color:var(--only-a);">Configuración única — 2 minutos:</strong><br>
+                1. Abre tu Google Sheets (Archivo B) → <strong>Extensiones → Apps Script</strong><br>
+                2. Borra el código existente y pega este:<br>
+                <pre style="background:#090c14; padding:10px; border-radius:6px; margin:8px 0; overflow-x:auto; font-size:10px; color:#34d399;">function doGet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data  = sheet.getDataRange().getValues();
+  var cols  = data[0];
+  var rows  = data.slice(1).map(function(r) {
+    var o = {}; cols.forEach(function(c,i){ o[c]=r[i]; }); return o;
+  });
+  return ContentService
+    .createTextOutput(JSON.stringify(rows))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+                3. Clic en <strong>Implementar → Nueva implementación</strong><br>
+                4. Tipo: <strong>Aplicación web</strong> · Ejecutar como: <strong>Yo</strong> · Acceso: <strong>Cualquiera</strong><br>
+                5. Copia la URL que empieza con <code>https://script.google.com/macros/s/…</code><br>
+                6. Pégala arriba y haz clic en <strong>Guardar y cargar</strong>
+              </div>
+              <div class="drive-loading" id="script-loading" style="margin-top:8px;">
+                <div class="spinner"></div> Cargando datos desde la fuente…
+              </div>
+            </div>
+
+            <!-- Zone resultado script -->
+            <div class="file-zone" id="zone-b-script" style="display:none; margin-top:8px">
+              <div id="zone-b-script-content"></div>
             </div>
           </div>
 
@@ -443,16 +504,17 @@ const state = {
 // ═══════════════════════════════════════════
 function setSource(src) {
   state.bSource = src;
-  document.getElementById('src-btn-local').classList.toggle('active', src === 'local');
-  document.getElementById('src-btn-drive').classList.toggle('active', src === 'drive');
-  document.getElementById('src-local').style.display = src === 'local' ? 'block' : 'none';
-  document.getElementById('src-drive').style.display = src === 'drive' ? 'block' : 'none';
-  if (src === 'drive') renderDriveQuick();
-  // Reset B if switching source
+  ['local','drive','script'].forEach(s => {
+    document.getElementById(`src-btn-${s}`)?.classList.toggle('active', s === src);
+    document.getElementById(`src-${s}`).style.display = s === src ? 'block' : 'none';
+  });
+  if (src === 'drive')  renderDriveQuick();
+  if (src === 'script') renderScriptQuick();
   resetB();
 }
 
 function resetB() {
+  clearBStorage();   // borrar datos guardados
   state.b = { wb: null, sheetName: null, data: null, name: '', fullData: null };
   state.columns.b = [];
   state.selectedBank = '__ALL__';
@@ -471,6 +533,9 @@ function resetB() {
   if (zbd) zbd.style.display = 'none';
   document.getElementById('drive-url').value = '';
   document.getElementById('drive-loading').classList.remove('visible');
+  // Reset script zone
+  const zbs = document.getElementById('zone-b-script');
+  if (zbs) zbs.style.display = 'none';
   checkReady();
 }
 
@@ -517,23 +582,41 @@ const _origSetSource = typeof setSource === 'function' ? setSource : null;
 // ═══════════════════════════════════════════
 // LOAD FROM DRIVE
 // ═══════════════════════════════════════════
+async function fetchWithFallback(urls) {
+  for (const u of urls) {
+    try {
+      const res = await fetch(u, { credentials: 'omit', mode: 'cors' });
+      if (res.ok) return res;
+    } catch (_) { /* try next */ }
+  }
+  throw new Error('No se pudo descargar el archivo. Verifica que esté compartido como "Cualquier persona con el enlace puede ver".');
+}
+
 async function loadFromDrive() {
   const url = document.getElementById('drive-url').value.trim();
   if (!url) { alert('Pega un link de Google Sheets o Drive.'); return; }
 
-  const exportUrl = driveToExportUrl(url);
-  if (!exportUrl) {
+  const urls = driveToExportUrls(url);
+  if (!urls.length) {
     alert('No pude reconocer el link. Asegúrate de que sea un link de Google Sheets o un archivo de Drive compartido.');
     return;
   }
 
   document.getElementById('drive-loading').classList.add('visible');
   try {
-    const res = await fetch(exportUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status} — verifica que el archivo esté compartido públicamente.`);
+    const res = await fetchWithFallback(urls);
     const buf = await res.arrayBuffer();
     const data = new Uint8Array(buf);
-    const wb = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+
+    // Detectar si es CSV por Content-Type o por extensión
+    const ct = res.headers.get('Content-Type') || '';
+    let wb;
+    if (ct.includes('text/csv') || ct.includes('text/plain')) {
+      const text = new TextDecoder().decode(data);
+      wb = XLSX.read(text, { type: 'string', cellDates: true, raw: false });
+    } else {
+      wb = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+    }
 
     state.b.wb = wb;
     const sheets = wb.SheetNames;
@@ -550,7 +633,6 @@ async function loadFromDrive() {
     const fileName = extractDriveFileName(url);
     state.b.name = fileName;
 
-    // Show loaded zone
     const zone = document.getElementById('zone-b-drive');
     zone.style.display = 'block';
     zone.classList.add('loaded');
@@ -561,7 +643,6 @@ async function loadFromDrive() {
       <button class="remove-file" onclick="resetB()" style="z-index:3">✕</button>
     `;
 
-    // Mostrar botón "Guardar acceso rápido" si el link no está ya guardado
     const saved = localStorage.getItem(DRIVE_SAVED_KEY);
     const btnSave = document.getElementById('btn-save-drive');
     if (btnSave) btnSave.style.display = (saved === url) ? 'none' : 'inline-block';
@@ -575,26 +656,128 @@ async function loadFromDrive() {
   }
 }
 
-function driveToExportUrl(url) {
-  // Google Sheets: https://docs.google.com/spreadsheets/d/ID/...
+// Retorna lista de URLs a intentar en orden (XLSX, luego CSV como fallback)
+function driveToExportUrls(url) {
+  // Google Sheets
   let m = url.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (m) {
-    // Get gid if present
+    const id  = m[1];
     const gid = url.match(/[#&?]gid=(\d+)/)?.[1] || '0';
-    return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=xlsx&gid=${gid}`;
+    return [
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx&gid=${gid}`,
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`,
+    ];
   }
-  // Google Drive file: https://drive.google.com/file/d/ID/view or /open?id=ID
+  // Google Drive file/d/ID
   m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  if (m) {
+    const id = m[1];
+    return [
+      `https://drive.usercontent.google.com/download?id=${id}&export=download&authuser=0`,
+      `https://drive.google.com/uc?export=download&id=${id}`,
+    ];
+  }
+  // ?id= format
   m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
-  return null;
+  if (m) {
+    const id = m[1];
+    return [
+      `https://drive.usercontent.google.com/download?id=${id}&export=download&authuser=0`,
+      `https://drive.google.com/uc?export=download&id=${id}`,
+    ];
+  }
+  return [];
 }
+
+// Alias for backward compat
+function driveToExportUrl(url) { return driveToExportUrls(url)[0] || null; }
 
 function extractDriveFileName(url) {
   if (url.includes('spreadsheets')) return 'Google Sheets';
   if (url.includes('drive.google.com')) return 'Archivo de Drive';
   return 'Archivo B (Drive)';
+}
+
+// ═══════════════════════════════════════════
+// DESDE LA FUENTE — Google Apps Script
+// ═══════════════════════════════════════════
+const SCRIPT_URL_KEY = 'conciliador_script_url';
+
+function renderScriptQuick() {
+  const saved = localStorage.getItem(SCRIPT_URL_KEY);
+  const box   = document.getElementById('script-quick');
+  const setup = document.getElementById('script-setup');
+  const lbl   = document.getElementById('script-url-label');
+  if (saved) {
+    if (box)   box.style.display   = 'block';
+    if (setup) setup.style.display = 'none';
+    if (lbl)   lbl.textContent     = saved;
+  } else {
+    if (box)   box.style.display   = 'none';
+    if (setup) setup.style.display = 'block';
+  }
+}
+
+function clearScriptUrl() {
+  localStorage.removeItem(SCRIPT_URL_KEY);
+  renderScriptQuick();
+}
+
+function toggleScriptInstructions() {
+  const el = document.getElementById('script-instructions');
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveAndLoadScript() {
+  const url = document.getElementById('script-url').value.trim();
+  if (!url) { alert('Pega la URL del Apps Script.'); return; }
+  if (!url.includes('script.google.com')) {
+    alert('La URL debe ser de Google Apps Script (script.google.com/macros/s/…/exec).');
+    return;
+  }
+  localStorage.setItem(SCRIPT_URL_KEY, url);
+  await loadFromScript();
+}
+
+async function loadFromScript() {
+  const url = localStorage.getItem(SCRIPT_URL_KEY);
+  if (!url) { alert('No hay una fuente configurada.'); return; }
+
+  const loader = document.getElementById('script-loading');
+  if (loader) loader.style.display = 'flex';
+
+  try {
+    const res = await fetch(url, { credentials: 'omit' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!Array.isArray(json) || !json.length) throw new Error('El script no devolvió datos. Verifica el código y el despliegue.');
+
+    state.b.data     = json;
+    state.b.fullData = json;
+    state.b.name     = 'Fuente en tiempo real';
+    state.b.sheetName = 'script';
+    state.columns.b  = Object.keys(json[0]);
+    saveBToStorage();
+
+    renderScriptQuick();
+
+    const zone = document.getElementById('zone-b-script');
+    zone.style.display = 'block';
+    zone.classList.add('loaded');
+    document.getElementById('zone-b-script-content').innerHTML = `
+      <div class="file-icon">⚡</div>
+      <div class="file-name">Fuente en tiempo real</div>
+      <div class="file-info">${json.length.toLocaleString()} filas · ${state.columns.b.length} columnas · cargado ${new Date().toLocaleTimeString('es-CO')}</div>
+      <button class="remove-file" onclick="resetB()" style="z-index:3">✕</button>
+    `;
+
+    checkBankColumn();
+    checkReady();
+  } catch(err) {
+    alert('Error cargando desde la fuente: ' + err.message);
+  } finally {
+    if (loader) loader.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -639,8 +822,73 @@ function loadSheet(side) {
   const ws = wb.Sheets[sheetName];
   const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
   state[side].data = raw;
-  if (side === 'b') state[side].fullData = raw;  // keep full copy for bank filtering
+  if (side === 'b') {
+    state[side].fullData = raw;
+    saveBToStorage();   // persistir automáticamente
+  }
   state.columns[side] = raw.length > 0 ? Object.keys(raw[0]) : [];
+}
+
+// ═══════════════════════════════════════════
+// PERSISTENCIA ARCHIVO B (localStorage)
+// ═══════════════════════════════════════════
+const B_DATA_KEY = 'conciliador_b_data';
+const B_META_KEY = 'conciliador_b_meta';
+
+function saveBToStorage() {
+  try {
+    const meta = { name: state.b.name, sheetName: state.b.sheetName, cols: state.columns.b, ts: Date.now() };
+    const json = JSON.stringify(state.b.data);
+    // Guardar solo si cabe (<8 MB aprox)
+    if (json.length > 8_000_000) { console.warn('Archivo B muy grande para localStorage'); return; }
+    localStorage.setItem(B_DATA_KEY, json);
+    localStorage.setItem(B_META_KEY, JSON.stringify(meta));
+  } catch(e) { console.warn('No se pudo guardar Archivo B:', e.message); }
+}
+
+function clearBStorage() {
+  localStorage.removeItem(B_DATA_KEY);
+  localStorage.removeItem(B_META_KEY);
+}
+
+function restoreBFromStorage() {
+  try {
+    const metaStr = localStorage.getItem(B_META_KEY);
+    const dataStr = localStorage.getItem(B_DATA_KEY);
+    if (!metaStr || !dataStr) return;
+    const meta = JSON.parse(metaStr);
+    const data = JSON.parse(dataStr);
+    if (!data.length) return;
+
+    state.b.data     = data;
+    state.b.fullData = data;
+    state.b.name     = meta.name;
+    state.b.sheetName = meta.sheetName;
+    state.columns.b  = meta.cols;
+
+    // Mostrar en zona B local
+    const zone    = document.getElementById('zone-b');
+    const content = document.getElementById('zone-b-content');
+    if (zone && content) {
+      zone.classList.add('loaded');
+      const fecha = new Date(meta.ts).toLocaleDateString('es-CO');
+      content.innerHTML = `
+        <div class="file-icon">💾</div>
+        <div class="file-name">${esc(meta.name || 'Archivo B guardado')}</div>
+        <div class="file-info">${data.length.toLocaleString()} filas · ${meta.cols.length} columnas · guardado el ${fecha}</div>
+      `;
+      let rm = zone.querySelector('.remove-file');
+      if (!rm) {
+        rm = document.createElement('button');
+        rm.className = 'remove-file';
+        rm.innerHTML = '✕';
+        rm.onclick = ev => { ev.stopPropagation(); resetB(); };
+        zone.appendChild(rm);
+      }
+    }
+    checkBankColumn();
+    checkReady();
+  } catch(e) { console.warn('No se pudo restaurar Archivo B:', e.message); }
 }
 
 function renderFileZone(side, name) {
@@ -1293,8 +1541,12 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Inicializar acceso rápido al cargar la página
-document.addEventListener('DOMContentLoaded', () => { renderDriveQuick(); });
+// Inicializar al cargar la página
+document.addEventListener('DOMContentLoaded', () => {
+  renderDriveQuick();
+  renderScriptQuick();
+  restoreBFromStorage();  // restaurar Archivo B guardado
+});
 </script>
 </body>
 </html>
