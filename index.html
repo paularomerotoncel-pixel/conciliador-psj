@@ -684,6 +684,9 @@ function loadFile(side, file) {
     } catch(err) { alert('Error leyendo el archivo: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
+  // Resetear el input para permitir recargar el mismo archivo
+  const inp = document.getElementById(`input-${side}`);
+  if (inp) inp.value = '';
 }
 
 function selectSheet(side) {
@@ -695,7 +698,25 @@ function selectSheet(side) {
 function loadSheet(side) {
   const { wb, sheetName } = state[side];
   const ws = wb.Sheets[sheetName];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+
+  // Intentar con raw:false (valores formateados); si retorna 0 filas, reintentar con raw:true
+  let raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, blankrows: false });
+  if (raw.length === 0) {
+    raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true, blankrows: false });
+  }
+
+  // Normalizar nombres de columnas: quitar espacios y BOM (﻿)
+  if (raw.length > 0) {
+    raw = raw.map(row => {
+      const norm = {};
+      for (const k of Object.keys(row)) {
+        const cleanKey = k.replace(/^﻿/, '').trim();
+        norm[cleanKey] = row[k];
+      }
+      return norm;
+    });
+  }
+
   state[side].data = raw;
   if (side === 'b') {
     state[side].fullData = raw;
@@ -770,10 +791,17 @@ function renderFileZone(side, name) {
   const zone = document.getElementById(`zone-${side}`);
   const content = document.getElementById(`zone-${side}-content`);
   zone.classList.add('loaded');
+  const rowCount = state[side].data.length;
+  const colCount = state.columns[side].length;
+  const colPreview = state.columns[side].slice(0, 4).map(c => `<span style="background:#1e3a5f;padding:1px 5px;border-radius:4px;font-size:10px;color:#93c5fd">${esc(c)}</span>`).join(' ');
+  const moreLabel = colCount > 4 ? `<span style="font-size:10px;color:var(--gray)">+${colCount - 4} más</span>` : '';
+  const warnMsg = rowCount === 0 ? `<div style="color:#f87171;font-size:11px;font-weight:700;margin-top:4px">⚠ No se detectaron filas. Verifica que la primera fila sea el encabezado.</div>` : '';
   content.innerHTML = `
     <div class="file-icon">✅</div>
     <div class="file-name">${esc(name)}</div>
-    <div class="file-info">${state[side].data.length.toLocaleString()} filas · ${state.columns[side].length} columnas</div>
+    <div class="file-info">${rowCount.toLocaleString()} filas · ${colCount} columnas</div>
+    <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:3px;justify-content:center">${colPreview}${moreLabel}</div>
+    ${warnMsg}
   `;
   let rm = zone.querySelector('.remove-file');
   if (!rm) {
